@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block title %}Agregar Animal{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-plus-circle me-2"></i>Agregar Nuevo Animal
+                </h5>
+            </div>
+            <div class="card-body">
+                <form method="post" novalidate>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="ear_tag" class="form-label">Número de Arete *</label>
+                            <input type="text" class="form-control" id="ear_tag" name="ear_tag" required>
+                            <div class="form-text">Identificador único del animal</div>
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <label for="name" class="form-label">Nombre</label>
+                            <input type="text" class="form-control" id="name" name="name">
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="breed" class="form-label">Raza</label>
+                            <select class="form-select" id="breed" name="breed">
+                                <option value="">Seleccionar raza</option>
+                                <option value="Merino">Merino</option>
+                                <option value="Dorper">Dorper</option>
+                                <option value="Suffolk">Suffolk</option>
+                                <option value="Hampshire">Hampshire</option>
+                                <option value="Otra">Otra</option>
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <label for="gender" class="form-label">Género *</label>
+                            <select class="form-select" id="gender" name="gender" required>
+                                <option value="">Seleccionar género</option>
+                                <option value="Macho">Macho</option>
+                                <option value="Hembra">Hembra</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="birth_date" class="form-label">Fecha de Nacimiento</label>
+                            <input type="date" class="form-control" id="birth_date" name="birth_date">
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <label for="weight" class="form-label">Peso (kg)</label>
+                            <input type="number" step="0.1" class="form-control" id="weight" name="weight">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="notes" class="form-label">Notas Adicionales</label>
+                        <textarea class="form-control" id="notes" name="notes" rows="3"></textarea>
+                    </div>
+
+                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                        <a href="{{ url_for('animals.list_animals') }}" class="btn btn-secondary me-md-2">
+                            <i class="fas fa-times me-2"></i>Cancelar
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save me-2"></i>Guardar Animal
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}Gestión de Alimentos{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0">
+        <i class="fas fa-utensils me-2 text-success"></i>Gestión de Alimentos
+    </h1>
+    <a href="{{ url_for('feeds.create_feed') }}" class="btn btn-success">
+        <i class="fas fa-plus me-2"></i>Agregar Alimento
+    </a>
+</div>
+
+<div class="card">
+    <div class="card-header bg-light">
+        <h5 class="card-title mb-0">Inventario de Alimentos</h5>
+    </div>
+    <div class="card-body">
+        {% if feeds %}
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Nombre</th>
+                        <th>Cantidad</th>
+                        <th>Unidad</th>
+                        <th>Proveedor</th>
+                        <th>Caducidad</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for feed in feeds %}
+                    <tr>
+                        <td>
+                            <strong class="text-success">{{ feed.name }}</strong>
+                            {% if feed.description %}
+                            <br><small class="text-muted">{{ feed.description[:50] }}...</small>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge bg-{% if feed.quantity > 50 %}success{% elif feed.quantity > 20 %}warning{% else %}danger{% endif %}">
+                                {{ feed.quantity }}
+                            </span>
+                        </td>
+                        <td>{{ feed.unit }}</td>
+                        <td>{{ feed.supplier or 'N/A' }}</td>
+                        <td>
+                            {% if feed.expiration_date %}
+                            {{ feed.expiration_date.strftime('%d/%m/%Y') }}
+                            {% else %}
+                            N/A
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="#" class="btn btn-sm btn-info" title="Ver">
+                                <i class="fas fa-eye"></i>
+                            </a>
+                            <a href="#" class="btn btn-sm btn-warning" title="Editar">
+                                <i class="fas fa-edit"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5">
+            <i class="fas fa-utensils fa-4x text-muted mb-3"></i>
+            <h4 class="text-muted">No hay alimentos registrados</h4>
+            <p class="text-muted">Comienza agregando el primer alimento al inventario</p>
+            <a href="{{ url_for('feeds.create_feed') }}" class="btn btn-success">
+                <i class="fas fa-plus me-2"></i>Agregar Primer Alimento
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+
+{% block title %}Inicio{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h1 class="display-5 fw-bold text-primary">
+            <i class="fas fa-paw me-2"></i>Gestión de Borregos
+        </h1>
+        <p class="lead">Sistema integral para la gestión de tu rebaño</p>
+    </div>
+</div>
+
+<!-- Tarjetas de estadísticas -->
+<div class="row mb-4">
+    <div class="col-md-3 col-6 mb-3">
+        <div class="card stats-card primary h-100">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-grow-1">
+                        <h6 class="text-muted mb-1">Total Animales</h6>
+                        <h3 class="fw-bold mb-0">{{ total_animals }}</h3>
+                    </div>
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-sheep fa-2x text-primary"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 col-6 mb-3">
+        <div class="card stats-card success h-100">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-grow-1">
+                        <h6 class="text-muted mb-1">Animales Activos</h6>
+                        <h3 class="fw-bold mb-0">{{ active_animals }}</h3>
+                    </div>
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-heart fa-2x text-success"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 col-6 mb-3">
+        <div class="card stats-card warning h-100">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-grow-1">
+                        <h6 class="text-muted mb-1">Stock Bajo</h6>
+                        <h3 class="fw-bold mb-0">{{ low_stock_items }}</h3>
+                    </div>
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-exclamation-triangle fa-2x text-warning"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 col-6 mb-3">
+        <div class="card stats-card info h-100">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-grow-1">
+                        <h6 class="text-muted mb-1">Inventario</h6>
+                        <h3 class="fw-bold mb-0">{{ total_animals + active_animals }}</h3>
+                    </div>
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-chart-line fa-2x text-info"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Acciones rápidas -->
+<div class="row">
+    <div class="col-lg-8 mb-4">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-tachometer-alt me-2"></i>Panel de Control
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <div class="d-grid gap-2">
+                            <a href="{{ url_for('animals.list_animals') }}" class="btn btn-outline-primary btn-lg">
+                                <i class="fas fa-sheep me-2"></i>Gestionar Animales
+                            </a>
+                            <a href="{{ url_for('animals.add_animal') }}" class="btn btn-primary">
+                                <i class="fas fa-plus me-2"></i>Agregar Animal
+                            </a>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <div class="d-grid gap-2">
+                            <a href="{{ url_for('sales.list_sales') }}" class="btn btn-outline-warning btn-lg">
+                                <i class="fas fa-dollar-sign me-2"></i>Registrar Ventas
+                            </a>
+                            <a href="{{ url_for('sales.register_sale') }}" class="btn btn-warning">
+                                <i class="fas fa-cash-register me-2"></i>Nueva Venta
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row mt-3">
+                    <div class="col-md-6 mb-3">
+                        <div class="d-grid gap-2">
+                            <a href="{{ url_for('feeds.list_feeds') }}" class="btn btn-outline-success btn-lg">
+                                <i class="fas fa-utensils me-2"></i>Control de Alimentos
+                            </a>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <div class="d-grid gap-2">
+                            <a href="{{ url_for('inventory.list_inventory') }}" class="btn btn-outline-info btn-lg">
+                                <i class="fas fa-boxes me-2"></i>Gestión de Inventario
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-4 mb-4">
+        <div class="card">
+            <div class="card-header bg-success text-white">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-info-circle me-2"></i>Información Rápida
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    <strong>Sistema activo</strong> - Todo funciona correctamente
+                </div>
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <strong>{{ low_stock_items }} items</strong> con stock bajo
+                </div>
+                <div class="alert alert-success">
+                    <i class="fas fa-check-circle me-2"></i>
+                    <strong>{{ active_animals }} animales</strong> en producción
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
