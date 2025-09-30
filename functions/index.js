@@ -7,6 +7,12 @@ const cors = require('cors');
 admin.initializeApp();
 const db = admin.firestore();
 
+// Configurar Firestore para evitar timeouts
+db.settings({ 
+    ignoreUndefinedProperties: true,
+    timeout: 30000 
+});
+
 const app = express();
 
 // Configurar CORS
@@ -14,6 +20,23 @@ app.use(cors({ origin: true }));
 
 // Middleware para parsear JSON
 app.use(express.json());
+app.get('/', (req, res) => {
+    res.json({ 
+        status: 'API funcionando', 
+        message: 'Sistema de Gestión de Borregos',
+        timestamp: new Date().toISOString(),
+        endpoints: [
+            '/api/health',
+            '/api/auth/create-admin',
+            '/api/auth/verify',
+            '/api/dashboard',
+            '/api/animals',
+            '/api/sales',
+            '/api/feeds',
+            '/api/inventory'
+        ]
+    });
+});
 
 // ==================== MIDDLEWARE DE AUTENTICACIÓN ====================
 
@@ -46,53 +69,70 @@ app.get('/api/health', (req, res) => {
 
 // ==================== ENDPOINTS DE AUTENTICACIÓN ====================
 
-// Crear usuario administrador
+/// Crear usuario administrador
 app.post('/api/auth/create-admin', async (req, res) => {
     try {
+        console.log('=== CREATE ADMIN REQUEST ===');
+        console.log('Body:', req.body);
+        
         const { email, name, uid } = req.body;
 
         if (!email) {
+            console.log('Error: Email requerido');
             return res.status(400).json({ error: 'Email es requerido' });
         }
 
         // Si no se proporciona UID, crear el usuario en Firebase Auth
         let userId = uid;
         if (!userId) {
-            const userRecord = await admin.auth().createUser({
-                email,
-                displayName: name,
-                emailVerified: true
-            });
-            userId = userRecord.uid;
+            console.log('Creando usuario en Firebase Auth...');
+            try {
+                const userRecord = await admin.auth().createUser({
+                    email,
+                    displayName: name,
+                    emailVerified: true,
+                    password: 'tempPassword123' // Contraseña temporal
+                });
+                userId = userRecord.uid;
+                console.log('Usuario creado en Auth:', userId);
+            } catch (authError) {
+                console.log('Error creando usuario en Auth:', authError);
+                // Si el usuario ya existe, obtener el UID
+                if (authError.code === 'auth/email-already-exists') {
+                    const userRecord = await admin.auth().getUserByEmail(email);
+                    userId = userRecord.uid;
+                    console.log('Usuario ya existe en Auth:', userId);
+                } else {
+                    throw authError;
+                }
+            }
         }
 
         // Crear/actualizar perfil en Firestore
-        await db.collection('users').doc(userId).set({
+        console.log('Creando perfil en Firestore...');
+        const userProfile = {
             email,
             name: name || 'Administrador',
             role: 'admin',
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
-        }, { merge: true }); // Usar merge para no sobreescribir datos existentes
+        };
+
+        await db.collection('users').doc(userId).set(userProfile, { merge: true });
+        console.log('Perfil creado en Firestore');
 
         res.status(201).json({
             message: 'Usuario administrador creado/actualizado exitosamente',
-            userId: userId
+            userId: userId,
+            profile: userProfile
         });
+        
     } catch (error) {
-        console.error('Error creating admin:', error);
-        
-        // Si el error es que el usuario ya existe, lo consideramos éxito
-        if (error.code === 'auth/email-already-exists' || error.code === 'auth/uid-already-exists') {
-            return res.status(200).json({
-                message: 'Usuario ya existente, perfil actualizado',
-                userId: req.body.uid
-            });
-        }
-        
+        console.error('Error completo en create-admin:', error);
         res.status(500).json({ 
             error: 'Error al crear usuario administrador',
-            details: error.message 
+            details: error.message,
+            code: error.code
         });
     }
 });
@@ -637,6 +677,32 @@ app.use((error, req, res, next) => {
         message: error.message 
     });
 });
+
+
+
+// Manejo de rutas no encontradas
+app.use('*', (req, res) => {
+    res.status(404).json({ 
+        error: 'Ruta no encontrada',
+        path: req.originalUrl,
+        availableEndpoints: [
+            'GET /',
+            'GET /api/health',
+            'POST /api/auth/create-admin',
+            'POST /api/auth/verify',
+            'GET /api/dashboard',
+            'GET /api/animals',
+            'POST /api/animals',
+            'GET /api/sales', 
+            'POST /api/sales',
+            'GET /api/feeds',
+            'POST /api/feeds',
+            'GET /api/inventory',
+            'POST /api/inventory'
+        ]
+    });
+});
+
 
 // ==================== EXPORTACIÓN ====================
 
