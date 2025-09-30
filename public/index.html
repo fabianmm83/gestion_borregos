@@ -1,89 +1,791 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Welcome to Firebase Hosting</title>
-
-    <!-- update the version number as needed -->
-    <script defer src="/__/firebase/12.3.0/firebase-app-compat.js"></script>
-    <!-- include only the Firebase features as you need -->
-    <script defer src="/__/firebase/12.3.0/firebase-auth-compat.js"></script>
-    <script defer src="/__/firebase/12.3.0/firebase-database-compat.js"></script>
-    <script defer src="/__/firebase/12.3.0/firebase-firestore-compat.js"></script>
-    <script defer src="/__/firebase/12.3.0/firebase-functions-compat.js"></script>
-    <script defer src="/__/firebase/12.3.0/firebase-messaging-compat.js"></script>
-    <script defer src="/__/firebase/12.3.0/firebase-storage-compat.js"></script>
-    <script defer src="/__/firebase/12.3.0/firebase-analytics-compat.js"></script>
-    <script defer src="/__/firebase/12.3.0/firebase-remote-config-compat.js"></script>
-    <script defer src="/__/firebase/12.3.0/firebase-performance-compat.js"></script>
-    <!-- 
-      initialize the SDK after all desired features are loaded, set useEmulator to false
-      to avoid connecting the SDK to running emulators.
-    -->
-    <script defer src="/__/firebase/init.js?useEmulator=true"></script>
-
-    <style media="screen">
-      body { background: #ECEFF1; color: rgba(0,0,0,0.87); font-family: Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; }
-      #message { background: white; max-width: 360px; margin: 100px auto 16px; padding: 32px 24px; border-radius: 3px; }
-      #message h2 { color: #ffa100; font-weight: bold; font-size: 16px; margin: 0 0 8px; }
-      #message h1 { font-size: 22px; font-weight: 300; color: rgba(0,0,0,0.6); margin: 0 0 16px;}
-      #message p { line-height: 140%; margin: 16px 0 24px; font-size: 14px; }
-      #message a { display: block; text-align: center; background: #039be5; text-transform: uppercase; text-decoration: none; color: white; padding: 16px; border-radius: 4px; }
-      #message, #message a { box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24); }
-      #load { color: rgba(0,0,0,0.4); text-align: center; font-size: 13px; }
-      @media (max-width: 600px) {
-        body, #message { margin-top: 0; background: white; box-shadow: none; }
-        body { border-top: 16px solid #ffa100; }
-      }
-    </style>
-  </head>
-  <body>
-    <div id="message">
-      <h2>Welcome</h2>
-      <h1>Firebase Hosting Setup Complete</h1>
-      <p>You're seeing this because you've successfully setup Firebase Hosting. Now it's time to go build something extraordinary!</p>
-      <a target="_blank" href="https://firebase.google.com/docs/hosting/">Open Hosting Documentation</a>
-    </div>
-    <p id="load">Firebase SDK Loading&hellip;</p>
-
-    <script>
-      document.addEventListener('DOMContentLoaded', function() {
-        const loadEl = document.querySelector('#load');
-        // // 🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥
-        // // The Firebase SDK is initialized and available here!
-        //
-        // firebase.auth().onAuthStateChanged(user => { });
-        // firebase.database().ref('/path/to/ref').on('value', snapshot => { });
-        // firebase.firestore().doc('/foo/bar').get().then(() => { });
-        // firebase.functions().httpsCallable('yourFunction')().then(() => { });
-        // firebase.messaging().requestPermission().then(() => { });
-        // firebase.storage().ref('/path/to/ref').getDownloadURL().then(() => { });
-        // firebase.analytics(); // call to activate
-        // firebase.analytics().logEvent('tutorial_completed');
-        // firebase.performance(); // call to activate
-        //
-        // // 🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥
-
-        try {
-          let app = firebase.app();
-          let features = [
-            'auth', 
-            'database', 
-            'firestore',
-            'functions',
-            'messaging', 
-            'storage', 
-            'analytics', 
-            'remoteConfig',
-            'performance',
-          ].filter(feature => typeof app[feature] === 'function');
-          loadEl.textContent = `Firebase SDK loaded with ${features.join(', ')}`;
-        } catch (e) {
-          console.error(e);
-          loadEl.textContent = 'Error loading the Firebase SDK, check the console.';
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Borregos Moreno</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <style>
+        .stats-card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
         }
-      });
-    </script>
-  </body>
+        .stats-card:hover {
+            transform: translateY(-5px);
+        }
+        .btn-lg {
+            padding: 12px 24px;
+            font-size: 1.1rem;
+        }
+        .display-5 {
+            background: linear-gradient(135deg, #007bff, #0056b3);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .view-container {
+            display: none;
+        }
+        #dashboard-view {
+            display: block;
+        }
+        .nav-link.active {
+            font-weight: bold;
+            background-color: rgba(255,255,255,0.1);
+            border-radius: 0.375rem;
+        }
+        .table-hover tbody tr:hover {
+            background-color: rgba(0, 123, 255, 0.1);
+        }
+        .badge-stock-low {
+            background-color: #dc3545;
+        }
+        .badge-stock-medium {
+            background-color: #ffc107;
+            color: #000;
+        }
+        .badge-stock-high {
+            background-color: #198754;
+        }
+        #app-container {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <!-- ==================== FORMULARIO DE LOGIN ==================== -->
+    <div id="login-container" class="container mt-5">
+        <div class="row justify-content-center">
+            <div class="col-md-6 col-lg-4">
+                <div class="card shadow">
+                    <div class="card-header bg-primary text-white text-center">
+                        <h4 class="mb-0">
+                            <i class="fas fa-paw me-2"></i>Gestión Borregos Moreno
+                        </h4>
+                        <small>Sistema de Gestión</small>
+                    </div>
+                    <div class="card-body p-4">
+                        <form id="login-form">
+                            <div class="mb-3">
+                                <label for="login-email" class="form-label">Email</label>
+                                <input type="email" class="form-control" id="login-email" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="login-password" class="form-label">Contraseña</label>
+                                <input type="password" class="form-control" id="login-password" required>
+                            </div>
+                            <div class="d-grid gap-2">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-sign-in-alt me-2"></i>Iniciar Sesión
+                                </button>
+                            </div>
+                        </form>
+                        <div class="text-center mt-3">
+                            <small class="text-muted">¿Primera vez? <a href="#" onclick="app.showRegister()">Crear cuenta</a></small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== FORMULARIO DE REGISTRO ==================== -->
+    <div id="register-container" class="container mt-5" style="display: none;">
+        <div class="row justify-content-center">
+            <div class="col-md-6 col-lg-4">
+                <div class="card shadow">
+                    <div class="card-header bg-success text-white text-center">
+                        <h4 class="mb-0">Crear Cuenta</h4>
+                    </div>
+                    <div class="card-body p-4">
+                        <form id="register-form">
+                            <div class="mb-3">
+                                <label for="register-name" class="form-label">Nombre</label>
+                                <input type="text" class="form-control" id="register-name" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="register-email" class="form-label">Email</label>
+                                <input type="email" class="form-control" id="register-email" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="register-password" class="form-label">Contraseña</label>
+                                <input type="password" class="form-control" id="register-password" required minlength="6">
+                            </div>
+                            <div class="d-grid gap-2">
+                                <button type="submit" class="btn btn-success">
+                                    <i class="fas fa-user-plus me-2"></i>Crear Cuenta
+                                </button>
+                            </div>
+                        </form>
+                        <div class="text-center mt-3">
+                            <small class="text-muted">¿Ya tienes cuenta? <a href="#" onclick="app.showLogin()">Iniciar Sesión</a></small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== APLICACIÓN PRINCIPAL ==================== -->
+    <div id="app-container">
+        <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+            <div class="container">
+                <a class="navbar-brand" href="#" onclick="app.showView('dashboard')">
+                    <i class="fas fa-paw me-2"></i>Gestión Borregos Moreno 
+                </a>
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+                <div class="collapse navbar-collapse" id="navbarNav">
+                    <ul class="navbar-nav ms-auto">
+                        <li class="nav-item">
+                            <a class="nav-link active" href="#" data-view="dashboard" onclick="app.showView('dashboard')">
+                                <i class="fas fa-home me-1"></i>Dashboard
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" data-view="animals" onclick="app.showView('animals')">
+                                <i class="fas fa-sheep me-1"></i>Borregos
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" data-view="sales" onclick="app.showView('sales')">
+                                <i class="fas fa-dollar-sign me-1"></i>Ventas
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" data-view="feeds" onclick="app.showView('feeds')">
+                                <i class="fas fa-utensils me-1"></i>Alimento
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" data-view="inventory" onclick="app.showView('inventory')">
+                                <i class="fas fa-boxes me-1"></i>Inventario
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link text-warning" href="#" onclick="app.logout()">
+                                <i class="fas fa-sign-out-alt me-1"></i>Cerrar Sesión
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </nav>
+
+        <div class="container mt-4">
+            <!-- ==================== VISTA DASHBOARD ==================== -->
+            <div id="dashboard-view" class="view-container">
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <h1 class="display-5 fw-bold text-primary">
+                            <i class="fas fa-paw me-2"></i>Gestión de Borregos Moreno
+                        </h1>
+                        <p class="lead">Sistema para la gestión del rebaño</p>
+                        <button class="btn btn-outline-secondary btn-sm" onclick="app.loadDashboardData()">
+                            <i class="fas fa-sync-alt me-1"></i>Actualizar
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Tarjetas de estadísticas -->
+                <div class="row mb-4">
+                    <div class="col-md-3 col-6 mb-3">
+                        <div class="card stats-card primary h-100">
+                            <div class="card-body">
+                                <div class="d-flex align-items-center">
+                                    <div class="flex-grow-1">
+                                        <h6 class="text-muted mb-1">Animales Totales</h6>
+                                        <h3 class="fw-bold mb-0" id="total-animals">0</h3>
+                                    </div>
+                                    <div class="flex-shrink-0">
+                                        <i class="fas fa-sheep fa-2x text-primary"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-3 col-6 mb-3">
+                        <div class="card stats-card success h-100">
+                            <div class="card-body">
+                                <div class="d-flex align-items-center">
+                                    <div class="flex-grow-1">
+                                        <h6 class="text-muted mb-1">Animales Activos</h6>
+                                        <h3 class="fw-bold mb-0" id="active-animals">0</h3>
+                                    </div>
+                                    <div class="flex-shrink-0">
+                                        <i class="fas fa-heart fa-2x text-success"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-3 col-6 mb-3">
+                        <div class="card stats-card warning h-100">
+                            <div class="card-body">
+                                <div class="d-flex align-items-center">
+                                    <div class="flex-grow-1">
+                                        <h6 class="text-muted mb-1">inventario Bajo</h6>
+                                        <h3 class="fw-bold mb-0" id="low-stock-items">0</h3>
+                                    </div>
+                                    <div class="flex-shrink-0">
+                                        <i class="fas fa-exclamation-triangle fa-2x text-warning"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-3 col-6 mb-3">
+                        <div class="card stats-card info h-100">
+                            <div class="card-body">
+                                <div class="d-flex align-items-center">
+                                    <div class="flex-grow-1">
+                                        <h6 class="text-muted mb-1">Inventario</h6>
+                                        <h3 class="fw-bold mb-0" id="total-inventory">0</h3>
+                                    </div>
+                                    <div class="flex-shrink-0">
+                                        <i class="fas fa-chart-line fa-2x text-info"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Acciones rápidas -->
+                <div class="row">
+                    <div class="col-lg-8 mb-4">
+                        <div class="card">
+                            <div class="card-header bg-primary text-white">
+                                <h5 class="card-title mb-0">
+                                    <i class="fas fa-tachometer-alt me-2"></i>Panel de Control
+                                </h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <div class="d-grid gap-2">
+                                            <button onclick="app.showView('animals')" class="btn btn-outline-primary btn-lg">
+                                                <i class="fas fa-sheep me-2"></i>Gestionar Animales
+                                            </button>
+                                            <button onclick="animalsManager.showAnimalForm()" class="btn btn-primary">
+                                                <i class="fas fa-plus me-2"></i>Agregar Animal
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <div class="d-grid gap-2">
+                                            <button onclick="app.showView('sales')" class="btn btn-outline-warning btn-lg">
+                                                <i class="fas fa-dollar-sign me-2"></i>Registrar Ventas
+                                            </button>
+                                            <button onclick="salesManager.showSaleForm()" class="btn btn-warning">
+                                                <i class="fas fa-cash-register me-2"></i>Nueva Venta
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="row mt-3">
+                                    <div class="col-md-6 mb-3">
+                                        <div class="d-grid gap-2">
+                                            <button onclick="app.showView('feeds')" class="btn btn-outline-success btn-lg">
+                                                <i class="fas fa-utensils me-2"></i>Control de Alimentos
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <div class="d-grid gap-2">
+                                            <button onclick="app.showView('inventory')" class="btn btn-outline-info btn-lg">
+                                                <i class="fas fa-boxes me-2"></i>Gestión de Inventario
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-lg-4 mb-4">
+                        <div class="card">
+                            <div class="card-header bg-success text-white">
+                                <h5 class="card-title mb-0">
+                                    <i class="fas fa-info-circle me-2"></i>Información Rápida
+                                </h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="alert alert-info">
+                                    <i class="fas fa-info-circle me-2"></i>
+                                    <strong>Sistema activo</strong> - Todo funciona correctamente
+                                </div>
+                                <div class="alert alert-warning">
+                                    <i class="fas fa-exclamation-triangle me-2"></i>
+                                    <strong id="low-stock-alert">0 items</strong> con stock bajo
+                                </div>
+                                <div class="alert alert-success">
+                                    <i class="fas fa-check-circle me-2"></i>
+                                    <strong id="active-animals-alert">0 animales</strong> en producción
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ==================== VISTA ANIMALES ==================== -->
+            <div id="animals-view" class="view-container">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h2><i class="fas fa-sheep me-2"></i>Gestión de Animales</h2>
+                    <div>
+                        <button class="btn btn-primary" onclick="animalsManager.showAnimalForm()">
+                            <i class="fas fa-plus me-1"></i>Nuevo Animal
+                        </button>
+                        <button class="btn btn-outline-secondary" onclick="animalsManager.loadAnimals()">
+                            <i class="fas fa-sync-alt me-1"></i>Actualizar
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Filtros -->
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <input type="text" class="form-control" placeholder="Buscar animal..." id="animal-search" onkeyup="animalsManager.filterAnimals()">
+                    </div>
+                    <div class="col-md-4">
+                        <select class="form-select" id="animal-status-filter" onchange="animalsManager.filterAnimals()">
+                            <option value="">Todos los estados</option>
+                            <option value="active">Activos</option>
+                            <option value="sold">Vendidos</option>
+                            <option value="deceased">Fallecidos</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="animals-list">
+                    <!-- Los animales se cargarán aquí -->
+                </div>
+            </div>
+
+            <!-- ==================== VISTA VENTAS ==================== -->
+            <div id="sales-view" class="view-container">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h2><i class="fas fa-dollar-sign me-2"></i>Registro de Ventas</h2>
+                    <div>
+                        <button class="btn btn-warning" onclick="salesManager.showSaleForm()">
+                            <i class="fas fa-cash-register me-1"></i>Nueva Venta
+                        </button>
+                        <button class="btn btn-outline-secondary" onclick="salesManager.loadSales()">
+                            <i class="fas fa-sync-alt me-1"></i>Actualizar
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Estadísticas de ventas -->
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <div class="card bg-primary text-white">
+                            <div class="card-body text-center">
+                                <h6 class="card-title">Total Transacciones</h6>
+                                <h3 class="fw-bold" id="total-transactions">0</h3>
+                                <small>Ventas registradas</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card bg-success text-white">
+                            <div class="card-body text-center">
+                                <h6 class="card-title">Ingresos Totales</h6>
+                                <h3 class="fw-bold" id="total-income">$0</h3>
+                                <small>Total en ventas</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="sales-list">
+                    <!-- Las ventas se cargarán aquí -->
+                </div>
+            </div>
+
+            <!-- ==================== VISTA ALIMENTOS ==================== -->
+            <div id="feeds-view" class="view-container">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h2><i class="fas fa-utensils me-2"></i>Control de Alimentos</h2>
+                    <div>
+                        <button class="btn btn-success" onclick="feedsManager.showFeedForm()">
+                            <i class="fas fa-plus me-1"></i>Registrar Alimentación
+                        </button>
+                        <button class="btn btn-outline-secondary" onclick="feedsManager.loadFeeds()">
+                            <i class="fas fa-sync-alt me-1"></i>Actualizar
+                        </button>
+                    </div>
+                </div>
+
+                <div id="feeds-list">
+                    <!-- Los registros de alimentación se cargarán aquí -->
+                </div>
+            </div>
+
+            <!-- ==================== VISTA INVENTARIO ==================== -->
+            <div id="inventory-view" class="view-container">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h2><i class="fas fa-boxes me-2 text-info"></i>Gestión de Inventario</h2>
+                    <div>
+                        <button class="btn btn-info" onclick="inventoryManager.showInventoryForm()">
+                            <i class="fas fa-plus me-1"></i>Agregar Ítem
+                        </button>
+                        <button class="btn btn-outline-secondary" onclick="inventoryManager.loadInventory()">
+                            <i class="fas fa-sync-alt me-1"></i>Actualizar
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Estadísticas de inventario -->
+                <div class="row mb-4">
+                    <div class="col-md-4">
+                        <div class="card bg-warning text-white">
+                            <div class="card-body text-center">
+                                <h6 class="card-title">Items con Stock Bajo</h6>
+                                <h3 class="fw-bold" id="inventory-low-stock">0</h3>
+                                <small>Necesitan atención inmediata</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Filtros de inventario -->
+                <div class="card mb-4">
+                    <div class="card-header bg-light">
+                        <div class="row align-items-center">
+                            <div class="col-md-6">
+                                <h5 class="card-title mb-0">Inventario General</h5>
+                            </div>
+                            <div class="col-md-6">
+                                <select class="form-select" id="inventory-type-filter" onchange="inventoryManager.filterInventory()">
+                                    <option value="">Todos los tipos</option>
+                                    <option value="medicine">Medicinas</option>
+                                    <option value="equipment">Equipos</option>
+                                    <option value="supplies">Insumos</option>
+                                    <option value="tools">Herramientas</option>
+                                    <option value="other">Otro</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="inventory-list">
+                    <!-- El inventario se cargará aquí -->
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== MODALES ==================== -->
+
+        <!-- Modal Agregar Animal -->
+        <div class="modal fade" id="animal-form-modal" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header bg-primary text-white">
+                        <h5 class="modal-title">
+                            <i class="fas fa-plus-circle me-2"></i>Agregar Animal
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <form id="animal-form">
+                        <div class="modal-body">
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="animal-name" class="form-label">Nombre</label>
+                                    <input type="text" class="form-control" id="animal-name" name="name" placeholder="Nombre del animal">
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="animal-earTag" class="form-label">Número de Arete *</label>
+                                    <input type="text" class="form-control" id="animal-earTag" name="earTag" required>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="animal-breed" class="form-label">Raza *</label>
+                                    <input type="text" class="form-control" id="animal-breed" name="breed" required>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="animal-gender" class="form-label">Género</label>
+                                    <select class="form-select" id="animal-gender" name="gender">
+                                        <option value="male">Macho</option>
+                                        <option value="female">Hembra</option>
+                                        <option value="unknown">Desconocido</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="animal-birthDate" class="form-label">Fecha de Nacimiento</label>
+                                    <input type="date" class="form-control" id="animal-birthDate" name="birthDate">
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="animal-weight" class="form-label">Peso (kg)</label>
+                                    <input type="number" step="0.1" class="form-control" id="animal-weight" name="weight">
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="animal-notes" class="form-label">Notas</label>
+                                <textarea class="form-control" id="animal-notes" name="notes" rows="3"></textarea>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="submit" class="btn btn-primary">Guardar Animal</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Registrar Venta -->
+        <div class="modal fade" id="sale-form-modal" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header bg-warning text-white">
+                        <h5 class="modal-title">
+                            <i class="fas fa-cash-register me-2"></i>Registrar Venta
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <form id="sale-form">
+                        <div class="modal-body">
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="sale-animalEarTag" class="form-label">Número de Arete *</label>
+                                    <input type="text" class="form-control" id="sale-animalEarTag" name="animalEarTag" required>
+                                    <div class="form-text">Ingresa el número de arete del animal</div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="sale-salePrice" class="form-label">Precio de Venta *</label>
+                                    <input type="number" step="0.01" class="form-control" id="sale-salePrice" name="salePrice" required>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="sale-weightAtSale" class="form-label">Peso al Vender (kg)</label>
+                                    <input type="number" step="0.1" class="form-control" id="sale-weightAtSale" name="weightAtSale">
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="sale-saleDate" class="form-label">Fecha de Venta</label>
+                                    <input type="date" class="form-control" id="sale-saleDate" name="saleDate">
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="sale-buyerName" class="form-label">Nombre del Comprador</label>
+                                    <input type="text" class="form-control" id="sale-buyerName" name="buyerName">
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="sale-buyerContact" class="form-label">Contacto del Comprador</label>
+                                    <input type="text" class="form-control" id="sale-buyerContact" name="buyerContact">
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="sale-notes" class="form-label">Notas</label>
+                                <textarea class="form-control" id="sale-notes" name="notes" rows="3"></textarea>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="submit" class="btn btn-warning">Registrar Venta</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Registrar Alimentación -->
+        <div class="modal fade" id="feed-form-modal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header bg-success text-white">
+                        <h5 class="modal-title">
+                            <i class="fas fa-utensils me-2"></i>Registrar Alimentación
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <form id="feed-form">
+                        <div class="modal-body">
+                            <div class="mb-3">
+                                <label for="feed-feedType" class="form-label">Tipo de Alimento *</label>
+                                <input type="text" class="form-control" id="feed-feedType" name="feedType" required>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="feed-quantity" class="form-label">Cantidad *</label>
+                                    <input type="number" step="0.1" class="form-control" id="feed-quantity" name="quantity" required>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="feed-unit" class="form-label">Unidad</label>
+                                    <input type="text" class="form-control" id="feed-unit" name="unit" value="kg">
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="feed-animalEarTag" class="form-label">Animal (opcional)</label>
+                                <input type="text" class="form-control" id="feed-animalEarTag" name="animalEarTag" placeholder="Número de arete">
+                            </div>
+                            <div class="mb-3">
+                                <label for="feed-feedingDate" class="form-label">Fecha de Alimentación</label>
+                                <input type="date" class="form-control" id="feed-feedingDate" name="feedingDate">
+                            </div>
+                            <div class="mb-3">
+                                <label for="feed-notes" class="form-label">Notas</label>
+                                <textarea class="form-control" id="feed-notes" name="notes" rows="2"></textarea>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="submit" class="btn btn-success">Registrar Alimentación</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Agregar al Inventario -->
+        <div class="modal fade" id="inventory-form-modal" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header bg-info text-white">
+                        <h5 class="modal-title">
+                            <i class="fas fa-plus-circle me-2"></i>Agregar al Inventario
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <form id="inventory-form">
+                        <div class="modal-body">
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="inventory-item_type" class="form-label">Tipo de Ítem *</label>
+                                    <select class="form-select" id="inventory-item_type" name="item_type" required>
+                                        <option value="">Seleccionar tipo</option>
+                                        <option value="medicine">Medicina</option>
+                                        <option value="equipment">Equipo</option>
+                                        <option value="supplies">Insumos</option>
+                                        <option value="tools">Herramientas</option>
+                                        <option value="other">Otro</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="col-md-6 mb-3">
+                                    <label for="inventory-itemName" class="form-label">Nombre del Ítem *</label>
+                                    <input type="text" class="form-control" id="inventory-itemName" name="itemName" required>
+                                </div>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="inventory-currentStock" class="form-label">Cantidad *</label>
+                                    <input type="number" class="form-control" id="inventory-currentStock" name="currentStock" required>
+                                </div>
+                                
+                                <div class="col-md-6 mb-3">
+                                    <label for="inventory-minStock" class="form-label">Stock Mínimo *</label>
+                                    <input type="number" class="form-control" id="inventory-minStock" name="minStock" required>
+                                    <div class="form-text">Alerta cuando el stock llegue a este nivel</div>
+                                </div>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="inventory-unit" class="form-label">Unidad de Medida</label>
+                                    <input type="text" class="form-control" id="inventory-unit" name="unit" placeholder="Ej: kg, litros, unidades">
+                                </div>
+                                
+                                <div class="col-md-6 mb-3">
+                                    <label for="inventory-price" class="form-label">Costo Unitario ($)</label>
+                                    <input type="number" step="0.01" class="form-control" id="inventory-price" name="price">
+                                </div>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="inventory-purchase_date" class="form-label">Fecha de Compra</label>
+                                    <input type="date" class="form-control" id="inventory-purchase_date" name="purchase_date">
+                                </div>
+                                
+                                <div class="col-md-6 mb-3">
+                                    <label for="inventory-expiration_date" class="form-label">Fecha de Caducidad</label>
+                                    <input type="date" class="form-control" id="inventory-expiration_date" name="expiration_date">
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="inventory-supplier" class="form-label">Proveedor</label>
+                                <input type="text" class="form-control" id="inventory-supplier" name="supplier">
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="inventory-notes" class="form-label">Descripción</label>
+                                <textarea class="form-control" id="inventory-notes" name="notes" rows="3"></textarea>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="submit" class="btn btn-info">Guardar en Inventario</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Actualizar Stock -->
+        <div class="modal fade" id="stock-update-modal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header bg-primary text-white">
+                        <h5 class="modal-title">Actualizar Stock</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <form id="stock-update-form">
+                        <div class="modal-body">
+                            <div class="mb-3">
+                                <label class="form-label">Stock Actual</label>
+                                <input type="number" class="form-control" id="update-current-stock" readonly>
+                            </div>
+                            <div class="mb-3">
+                                <label for="update-operation" class="form-label">Operación</label>
+                                <select class="form-select" id="update-operation" name="operation">
+                                    <option value="set">Establecer nuevo valor</option>
+                                    <option value="add">Agregar cantidad</option>
+                                    <option value="subtract">Quitar cantidad</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="update-quantity" class="form-label">Cantidad</label>
+                                <input type="number" class="form-control" id="update-quantity" name="quantity" required>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="submit" class="btn btn-primary">Actualizar Stock</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="js/app.js"></script>
+    <script src="js/animals.js"></script>
+    <script src="js/sales.js"></script>
+    <script src="js/feeds.js"></script>
+    <script src="js/inventory.js"></script>
+</body>
 </html>
