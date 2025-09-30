@@ -6,6 +6,7 @@
   },
   "hosting": {
     "public": "public",
+    "cleanUrls": true,
     "ignore": [
       "firebase.json",
       "**/.*",
@@ -17,7 +18,7 @@
         "function": "api"
       },
       {
-        "source": "**",
+        "source": "!/js/**",
         "destination": "/index.html"
       }
     ]
