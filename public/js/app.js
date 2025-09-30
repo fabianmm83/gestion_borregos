@@ -10,6 +10,7 @@ class App {
     }
 
     init() {
+        console.log('🚀 App inicializando...');
         this.createLoadingElement();
         this.setupEventListeners();
         
@@ -63,7 +64,7 @@ showRegister() {
     document.getElementById('register-container').style.display = 'block';
 }
 
-// AGREGAR: Método para mensajes de error de Auth
+// Método para mensajes de error de Auth
 getAuthErrorMessage(errorCode) {
     const messages = {
         'EMAIL_EXISTS': 'Este correo electrónico ya está registrado',
@@ -80,13 +81,23 @@ getAuthErrorMessage(errorCode) {
 
 async handleRegister(form) {
     try {
+        console.log('🎯 handleRegister INICIADO');
         this.showLoading(true);
+        
         const name = document.getElementById('register-name').value;
         const email = document.getElementById('register-email').value;
         const password = document.getElementById('register-password').value;
 
-        console.log('Intentando crear cuenta:', { name, email });
+        console.log('📝 Datos del formulario:', { name, email, password: '***' });
 
+        if (!email || !password) {
+            console.log('❌ Campos vacíos');
+            this.showAlert('Email y contraseña son requeridos', 'danger');
+            return;
+        }
+
+        console.log('🔐 Llamando a Firebase Auth...');
+        
         // 1. Crear usuario en Firebase Auth
         const authResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${FIREBASE_API_KEY}`, {
             method: 'POST',
@@ -100,13 +111,16 @@ async handleRegister(form) {
             })
         });
 
+        console.log('📨 Respuesta de Auth recibida:', authResponse.status);
         const authData = await authResponse.json();
+        console.log('📊 Datos de Auth:', authData);
 
         if (authData.error) {
+            console.log('❌ Error de Auth:', authData.error);
             throw new Error(this.getAuthErrorMessage(authData.error.message));
         }
 
-        console.log('✅ Usuario creado en Auth:', authData);
+        console.log('✅ Usuario creado en Auth:', authData.localId);
 
         // 2. Guardar el token inmediatamente
         localStorage.setItem('authToken', authData.idToken);
@@ -116,8 +130,11 @@ async handleRegister(form) {
             name: name
         };
 
+        console.log('💾 Token guardado en localStorage');
+
         // 3. Crear perfil en nuestro backend (Firebase Functions)
         try {
+            console.log('🌐 Llamando a API para crear perfil...');
             const profileResponse = await this.apiCall('/auth/create-admin', {
                 method: 'POST',
                 body: { 
@@ -129,31 +146,40 @@ async handleRegister(form) {
             console.log('✅ Perfil creado en backend:', profileResponse);
         } catch (profileError) {
             console.warn('⚠️ Error creando perfil:', profileError);
-            // Continuamos aunque falle la creación del perfil
         }
 
+        console.log('🎉 Registro completado, mostrando app...');
         this.showAlert('¡Cuenta creada exitosamente!', 'success');
         this.showApp();
         this.loadDashboardData();
         
     } catch (error) {
-        console.error('❌ Error completo al registrar:', error);
+        console.error('💥 Error completo al registrar:', error);
         this.showAlert('Error al crear cuenta: ' + error.message, 'danger');
     } finally {
         this.showLoading(false);
+        console.log('🏁 handleRegister FINALIZADO');
     }
 }
 
-// AGREGAR: Método para login
+// Método para login
 async handleLogin(form) {
     try {
+        console.log('🎯 handleLogin INICIADO');
         this.showLoading(true);
         const email = document.getElementById('login-email').value;
         const password = document.getElementById('login-password').value;
 
-        console.log('Intentando login:', { email });
+        console.log('📝 Intentando login:', { email });
+
+        if (!email || !password) {
+            console.log('❌ Campos vacíos');
+            this.showAlert('Email y contraseña son requeridos', 'danger');
+            return;
+        }
 
         // Login con Firebase Auth
+        console.log('🔐 Llamando a Firebase Auth...');
         const authResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`, {
             method: 'POST',
             headers: {
@@ -166,13 +192,16 @@ async handleLogin(form) {
             })
         });
 
+        console.log('📨 Respuesta de Auth recibida:', authResponse.status);
         const authData = await authResponse.json();
+        console.log('📊 Datos de Auth:', authData);
 
         if (authData.error) {
+            console.log('❌ Error de Auth:', authData.error);
             throw new Error(this.getAuthErrorMessage(authData.error.message));
         }
 
-        console.log('✅ Login exitoso:', authData);
+        console.log('✅ Login exitoso:', authData.localId);
 
         // Guardar token y usuario
         localStorage.setItem('authToken', authData.idToken);
@@ -182,15 +211,17 @@ async handleLogin(form) {
             name: authData.displayName || email
         };
 
+        console.log('💾 Token guardado en localStorage');
         this.showAlert('¡Bienvenido!', 'success');
         this.showApp();
         this.loadDashboardData();
         
     } catch (error) {
-        console.error('❌ Error en login:', error);
+        console.error('💥 Error en login:', error);
         this.showAlert('Error al iniciar sesión: ' + error.message, 'danger');
     } finally {
         this.showLoading(false);
+        console.log('🏁 handleLogin FINALIZADO');
     }
 }
 
@@ -223,6 +254,8 @@ logout() {
                 config.body = JSON.stringify(config.body);
             }
 
+            console.log('🌐 API Call:', endpoint, config);
+
             const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
 
             if (response.status === 401) {
@@ -236,9 +269,12 @@ logout() {
                 throw new Error(`Error ${response.status}: ${errorText || response.statusText}`);
             }
 
-            return await response.json();
+            const result = await response.json();
+            console.log('✅ API Response:', result);
+            return result;
+
         } catch (error) {
-            console.error('API Call error:', error);
+            console.error('❌ API Call error:', error);
             
             // No mostrar alerta para errores de autenticación (ya se manejan arriba)
             if (!error.message.includes('Sesión expirada')) {
@@ -571,11 +607,10 @@ logout() {
     // ==================== EVENT LISTENERS ====================
 
     setupEventListeners() {
-        // Formulario de login
-        this.setupFormHandler('login-form', (form) => this.handleLogin(form));
+        console.log('🔧 Configurando event listeners...');
         
-        // Formulario de registro  
-        this.setupFormHandler('register-form', (form) => this.handleRegister(form));
+        // CONEXIÓN MANUAL DE FORMULARIOS - GARANTIZADA
+        this.connectFormsManually();
 
         // Navegación principal
         document.addEventListener('click', (e) => {
@@ -608,6 +643,56 @@ logout() {
                     this.hideModal(openModal.id);
                 }
             }
+        });
+    }
+
+    // NUEVO MÉTODO: Conexión manual garantizada de formularios
+    connectFormsManually() {
+        console.log('🔗 Conectando formularios manualmente...');
+        
+        // Formulario de LOGIN
+        const loginForm = document.getElementById('login-form');
+        if (loginForm) {
+            console.log('✅ Login form encontrado, conectando...');
+            loginForm.onsubmit = async (e) => {
+                e.preventDefault();
+                console.log('🎯 Login form submitted - MANUAL');
+                await this.handleLogin(loginForm);
+            };
+        } else {
+            console.log('❌ Login form NO encontrado');
+        }
+        
+        // Formulario de REGISTRO
+        const registerForm = document.getElementById('register-form');
+        if (registerForm) {
+            console.log('✅ Register form encontrado, conectando...');
+            registerForm.onsubmit = async (e) => {
+                e.preventDefault();
+                console.log('🎯 Register form submitted - MANUAL');
+                await this.handleRegister(registerForm);
+            };
+        } else {
+            console.log('❌ Register form NO encontrado');
+        }
+        
+        // Botones de navegación login/register
+        const showRegisterLinks = document.querySelectorAll('a[href="#"][onclick*="showRegister"]');
+        showRegisterLinks.forEach(link => {
+            link.onclick = (e) => {
+                e.preventDefault();
+                console.log('🔄 Mostrando registro');
+                this.showRegister();
+            };
+        });
+        
+        const showLoginLinks = document.querySelectorAll('a[href="#"][onclick*="showLogin"]');
+        showLoginLinks.forEach(link => {
+            link.onclick = (e) => {
+                e.preventDefault();
+                console.log('🔄 Mostrando login');
+                this.showLogin();
+            };
         });
     }
 
@@ -714,23 +799,35 @@ logout() {
     }
 }
 
-// Inicializar la aplicación cuando el DOM esté listo
-document.addEventListener('DOMContentLoaded', () => {
-    // Inicializar la aplicación principal
-    const app = App.init();
+// CONEXIÓN GARANTIZADA - Ejecutar después de que todo esté cargado
+function initializeAppWithRetry() {
+    console.log('🔄 Inicializando app con retry...');
     
-    // Configurar manejo de errores globales
-    window.addEventListener('error', (event) => {
-        console.error('Error global:', event.error);
-        app.showAlert('Ocurrió un error inesperado en la aplicación', 'danger');
-    });
-    
-    // Manejar promesas no capturadas
-    window.addEventListener('unhandledrejection', (event) => {
-        console.error('Promesa no capturada:', event.reason);
-        app.showAlert('Error en la aplicación: ' + event.reason.message, 'danger');
-    });
-});
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('📄 DOM completamente cargado');
+            const app = App.init();
+            
+            // Reconectar formularios después de un delay para asegurar
+            setTimeout(() => {
+                if (app && app.connectFormsManually) {
+                    app.connectFormsManually();
+                }
+            }, 500);
+        });
+    } else {
+        console.log('📄 DOM ya está cargado');
+        const app = App.init();
+        setTimeout(() => {
+            if (app && app.connectFormsManually) {
+                app.connectFormsManually();
+            }
+        }, 500);
+    }
+}
+
+// Inicializar la aplicación
+initializeAppWithRetry();
 
 // Hacer disponible globalmente para otros scripts
 window.App = App;
