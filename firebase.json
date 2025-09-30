@@ -1,9 +1,18 @@
 {
-  "functions": {
-    "source": "functions",
-    "runtime": "nodejs18",
-    "predeploy": []
-  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "ignore": [
+        "venv",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ],
+      "runtime": "python313"
+    }
+  ],
   "hosting": {
     "public": "public",
     "ignore": [
@@ -12,10 +21,6 @@
       "**/node_modules/**"
     ],
     "rewrites": [
-      {
-        "source": "/api/**",
-        "function": "api"
-      },
       {
         "source": "**",
         "destination": "/index.html"

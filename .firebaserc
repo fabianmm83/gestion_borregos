@@ -1,17 +1,4 @@
 {
-  "functions": {
-    "source": "functions",
-    "runtime": "python311"
-  },
-  "hosting": {
-    "public": "public",
-    "rewrites": [
-      {
-        "source": "**",
-        "function": "flask_app"
-      }
-    ]
-  },
   "projects": {
     "default": "gestionborregos"
   }
