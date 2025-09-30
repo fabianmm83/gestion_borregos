@@ -787,5 +787,217 @@
 <script src="/js/sales.js"></script>
 <script src="/js/feeds.js"></script>
 <script src="/js/inventory.js"></script>
+
+<script>
+// ==================== DEBUG COMPLETO ====================
+console.log('🐛 INICIANDO DEBUG COMPLETO');
+
+// 1. Verificar que todo esté cargado
+console.log('📦 ESTADO DE CARGA:', {
+    app: window.app ? '✅ CARGADO' : '❌ NO CARGADO',
+    appMethods: window.app ? Object.keys(window.app) : 'NO HAY APP',
+    firebaseKey: typeof FIREBASE_API_KEY !== 'undefined' ? '✅ DEFINIDA' : '❌ NO DEFINIDA',
+    apiUrl: typeof API_BASE_URL !== 'undefined' ? '✅ DEFINIDA' : '❌ NO DEFINIDA'
+});
+
+// 2. Conexión MANUAL y FORZADA de formularios
+function connectFormsWithDebug() {
+    console.log('🔗 CONECTANDO FORMULARIOS CON DEBUG...');
+    
+    // FORMULARIO DE REGISTRO
+    const registerForm = document.getElementById('register-form');
+    if (registerForm) {
+        console.log('✅ REGISTER FORM ENCONTRADO');
+        
+        // Eliminar cualquier event listener previo
+        const newRegisterForm = registerForm.cloneNode(true);
+        registerForm.parentNode.replaceChild(newRegisterForm, registerForm);
+        
+        // Conectar con debug completo
+        newRegisterForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            
+            console.log('🎯 REGISTER FORM SUBMIT - CAPTURADO');
+            console.log('📝 DATOS DEL FORMULARIO:', {
+                name: document.getElementById('register-name').value,
+                email: document.getElementById('register-email').value,
+                password: document.getElementById('register-password').value
+            });
+            
+            if (window.app && window.app.handleRegister) {
+                console.log('🚀 EJECUTANDO handleRegister...');
+                await window.app.handleRegister(newRegisterForm);
+            } else {
+                console.log('❌ ERROR: app.handleRegister no disponible');
+                alert('Error: La aplicación no se cargó correctamente. Recarga la página.');
+            }
+        });
+    }
+    
+    // FORMULARIO DE LOGIN
+    const loginForm = document.getElementById('login-form');
+    if (loginForm) {
+        console.log('✅ LOGIN FORM ENCONTRADO');
+        
+        const newLoginForm = loginForm.cloneNode(true);
+        loginForm.parentNode.replaceChild(newLoginForm, loginForm);
+        
+        newLoginForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            console.log('🎯 LOGIN FORM SUBMIT - CAPTURADO');
+            
+            if (window.app && window.app.handleLogin) {
+                await window.app.handleLogin(newLoginForm);
+            }
+        });
+    }
+}
+
+// 3. Probar Firebase Auth DIRECTAMENTE
+async function testFirebaseAuthDirectly() {
+    console.log('🧪 TESTEANDO FIREBASE AUTH DIRECTAMENTE...');
+    
+    const testData = {
+        email: 'test' + Date.now() + '@test.com',
+        password: 'password123'
+    };
+    
+    try {
+        const response = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=AIzaSyC7XrvX6AOAUP7dhd6yR4xIO0aqRwGe5nk`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(testData)
+        });
+        
+        const data = await response.json();
+        console.log('🔥 RESULTADO DIRECTO FIREBASE AUTH:', data);
+        
+        if (data.error) {
+            console.log('❌ ERROR FIREBASE AUTH:', data.error.message);
+            if (data.error.message.includes('TOO_MANY_ATTEMPTS_TRY_LATER')) {
+                console.log('🔧 Firebase Auth está BLOQUEADO temporalmente');
+            } else if (data.error.message.includes('OPERATION_NOT_ALLOWED')) {
+                console.log('🔧 Email/Password no está habilitado en Firebase Console');
+            }
+        } else {
+            console.log('✅ FIREBASE AUTH FUNCIONA! User ID:', data.localId);
+        }
+    } catch (error) {
+        console.log('💥 ERROR DE CONEXIÓN FIREBASE:', error);
+    }
+}
+
+// 4. Función para probar registro manualmente
+function testManualRegister() {
+    console.log('🧪 INICIANDO REGISTRO MANUAL...');
+    
+    // Datos de prueba
+    const testData = {
+        name: 'Usuario Test ' + Date.now(),
+        email: 'test' + Date.now() + '@test.com',
+        password: 'password123'
+    };
+    
+    // Llenar el formulario
+    document.getElementById('register-name').value = testData.name;
+    document.getElementById('register-email').value = testData.email;
+    document.getElementById('register-password').value = testData.password;
+    
+    console.log('📝 FORMULARIO LLENADO CON:', testData);
+    
+    // Ejecutar handleRegister directamente
+    if (window.app && window.app.handleRegister) {
+        const fakeForm = {
+            querySelector: () => ({ value: '' })
+        };
+        window.app.handleRegister(fakeForm);
+    } else {
+        console.log('❌ app.handleRegister no disponible');
+    }
+}
+
+// 5. Agregar botones de prueba a la página
+function addDebugButtons() {
+    const debugDiv = document.createElement('div');
+    debugDiv.style.cssText = `
+        position: fixed;
+        top: 10px;
+        right: 10px;
+        background: rgba(0,0,0,0.8);
+        color: white;
+        padding: 10px;
+        border-radius: 5px;
+        z-index: 9999;
+        font-family: Arial;
+        font-size: 12px;
+    `;
+    
+    debugDiv.innerHTML = `
+        <div style="margin-bottom: 5px;"><strong>🧪 DEBUG PANEL</strong></div>
+        <button onclick="testFirebaseAuthDirectly()" style="background: #dc3545; color: white; border: none; padding: 5px; margin: 2px; border-radius: 3px; cursor: pointer;">Test Auth</button>
+        <button onclick="testManualRegister()" style="background: #28a745; color: white; border: none; padding: 5px; margin: 2px; border-radius: 3px; cursor: pointer;">Test Register</button>
+        <button onclick="connectFormsWithDebug()" style="background: #007bff; color: white; border: none; padding: 5px; margin: 2px; border-radius: 3px; cursor: pointer;">Reconectar Forms</button>
+        <button onclick="console.log('App:', window.app)" style="background: #6c757d; color: white; border: none; padding: 5px; margin: 2px; border-radius: 3px; cursor: pointer;">Ver App</button>
+    `;
+    
+    document.body.appendChild(debugDiv);
+}
+
+// 6. Inicialización completa
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('🚀 DOM CARGADO - INICIANDO DEBUG...');
+    
+    // Esperar a que los scripts se carguen
+    setTimeout(() => {
+        console.log('🕐 EJECUTANDO DEBUG...');
+        
+        // Conectar formularios
+        connectFormsWithDebug();
+        
+        // Agregar botones de debug
+        addDebugButtons();
+        
+        // Test automático de Firebase Auth
+        testFirebaseAuthDirectly();
+        
+        // Verificar estado cada 2 segundos
+        const checkInterval = setInterval(() => {
+            if (window.app) {
+                console.log('✅ APP DETECTADA Y LISTA');
+                clearInterval(checkInterval);
+            } else {
+                console.log('⏳ Esperando app...');
+            }
+        }, 2000);
+        
+    }, 1000);
+});
+
+// 7. También conectar cuando se cambie entre login/register
+const originalShowRegister = App.prototype.showRegister;
+App.prototype.showRegister = function() {
+    console.log('🔄 MOSTRANDO REGISTRO - RECONECTANDO FORM...');
+    originalShowRegister.call(this);
+    setTimeout(connectFormsWithDebug, 100);
+};
+
+const originalShowLogin = App.prototype.showLogin;
+App.prototype.showLogin = function() {
+    console.log('🔄 MOSTRANDO LOGIN - RECONECTANDO FORM...');
+    originalShowLogin.call(this);
+    setTimeout(connectFormsWithDebug, 100);
+};
+
+console.log('🐛 DEBUG SCRIPT CARGADO COMPLETAMENTE');
+
+// Hacer funciones disponibles globalmente
+window.testFirebaseAuthDirectly = testFirebaseAuthDirectly;
+window.testManualRegister = testManualRegister;
+window.connectFormsWithDebug = connectFormsWithDebug;
+</script>
+
+
 </body>
 </html>
