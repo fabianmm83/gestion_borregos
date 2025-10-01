@@ -1,5 +1,5 @@
 // Configuración global
-const API_BASE_URL = 'https://us-central1-gestionborregos.cloudfunctions.net/api';
+const API_BASE_URL = 'https://us-central1-gestionborregos.cloudfunctions.net';
 const FIREBASE_API_KEY = 'AIzaSyC7XrvX6AOAUP7dhd6yR4xIO0aqRwGe5nk';
 
 class App {
