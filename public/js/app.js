@@ -204,6 +204,17 @@ class App {
     // ==================== COMUNICACIÓN CON API ====================
 
     async apiCall(endpoint, options = {}) {
+        
+         // 🔴 AGREGAR ESTO AL INICIO DE LA FUNCIÓN:
+    console.log('🔴 DEBUG URL CONSTRUCCIÓN:');
+    console.log('this.API_BASE_URL:', this.API_BASE_URL);
+    console.log('endpoint:', endpoint);
+    console.log('URL completa:', `${this.API_BASE_URL}${endpoint}`);
+        
+        
+        
+        
+        
         try {
             const token = localStorage.getItem('authToken');
             const config = {
