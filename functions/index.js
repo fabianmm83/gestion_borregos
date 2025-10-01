@@ -751,4 +751,10 @@ app.use('*', (req, res) => {
 
 // ==================== EXPORTACIÓN ====================
 
-exports.api = functions.https.onRequest(app);
+exports.api = functions.https.onRequest((req, res) => {
+  // Agregar prefijo /api a todas las rutas
+  if (!req.path) {
+    req.url = `/api${req.url}`;
+  }
+  return app(req, res);
+});
