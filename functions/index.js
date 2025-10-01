@@ -30,20 +30,21 @@ app.use((req, res, next) => {
 // Middleware para parsear JSON
 app.use(express.json());
 
+// Ruta raíz corregida
 app.get('/', (req, res) => {
     res.json({ 
         status: 'API funcionando', 
         message: 'Sistema de Gestión de Borregos',
         timestamp: new Date().toISOString(),
         endpoints: [
-            '/api/health',
-            '/api/auth/create-admin',
-            '/api/auth/verify',
-            '/api/dashboard',
-            '/api/animals',
-            '/api/sales',
-            '/api/feeds',
-            '/api/inventory'
+            '/health',
+            '/auth/create-admin',
+            '/auth/verify',
+            '/dashboard',
+            '/animals',
+            '/sales',
+            '/feeds',
+            '/inventory'
         ]
     });
 });
@@ -69,7 +70,7 @@ const authenticate = async (req, res, next) => {
 
 // ==================== ENDPOINTS PÚBLICOS ====================
 
-app.get('/api/health', (req, res) => {
+app.get('/health', (req, res) => {
     res.json({ 
         status: 'OK', 
         message: 'Sistema de Gestión de Borregos funcionando correctamente',
@@ -80,7 +81,7 @@ app.get('/api/health', (req, res) => {
 // ==================== ENDPOINTS DE AUTENTICACIÓN ====================
 
 // Crear usuario administrador
-app.post('/api/auth/create-admin', async (req, res) => {
+app.post('/auth/create-admin', async (req, res) => {
     try {
         console.log('=== CREATE ADMIN REQUEST ===');
         console.log('Body:', req.body);
@@ -148,7 +149,7 @@ app.post('/api/auth/create-admin', async (req, res) => {
 });
 
 // Verificar token
-app.post('/api/auth/verify', async (req, res) => {
+app.post('/auth/verify', async (req, res) => {
     try {
         const { token } = req.body;
         
@@ -180,7 +181,7 @@ app.post('/api/auth/verify', async (req, res) => {
 // ==================== ENDPOINTS PROTEGIDOS DEL DASHBOARD ====================
 
 // Obtener datos del dashboard
-app.get('/api/dashboard', authenticate, async (req, res) => {
+app.get('/dashboard', authenticate, async (req, res) => {
     try {
         const userId = req.user.uid;
         
@@ -226,7 +227,7 @@ app.get('/api/dashboard', authenticate, async (req, res) => {
 // ==================== GESTIÓN DE ANIMALES (PROTEGIDO) ====================
 
 // Obtener todos los animales del usuario
-app.get('/api/animals', authenticate, async (req, res) => {
+app.get('/animals', authenticate, async (req, res) => {
     try {
         const userId = req.user.uid;
         const animalsSnapshot = await db.collection('animals')
@@ -249,7 +250,7 @@ app.get('/api/animals', authenticate, async (req, res) => {
 });
 
 // Obtener un animal específico del usuario
-app.get('/api/animals/:id', authenticate, async (req, res) => {
+app.get('/animals/:id', authenticate, async (req, res) => {
     try {
         const userId = req.user.uid;
         const animalDoc = await db.collection('animals').doc(req.params.id).get();
@@ -278,7 +279,7 @@ app.get('/api/animals/:id', authenticate, async (req, res) => {
 });
 
 // Agregar nuevo animal
-app.post('/api/animals', authenticate, async (req, res) => {
+app.post('/animals', authenticate, async (req, res) => {
     try {
         const userId = req.user.uid;
         const {
@@ -335,7 +336,7 @@ app.post('/api/animals', authenticate, async (req, res) => {
 });
 
 // Actualizar animal
-app.put('/api/animals/:id', authenticate, async (req, res) => {
+app.put('/animals/:id', authenticate, async (req, res) => {
     try {
         const userId = req.user.uid;
         const animalId = req.params.id;
@@ -369,7 +370,7 @@ app.put('/api/animals/:id', authenticate, async (req, res) => {
 });
 
 // Eliminar animal
-app.delete('/api/animals/:id', authenticate, async (req, res) => {
+app.delete('/animals/:id', authenticate, async (req, res) => {
     try {
         const userId = req.user.uid;
         const animalId = req.params.id;
@@ -397,7 +398,7 @@ app.delete('/api/animals/:id', authenticate, async (req, res) => {
 // ==================== GESTIÓN DE VENTAS (PROTEGIDO) ====================
 
 // Obtener todas las ventas del usuario
-app.get('/api/sales', authenticate, async (req, res) => {
+app.get('/sales', authenticate, async (req, res) => {
     try {
         const userId = req.user.uid;
         const salesSnapshot = await db.collection('sales')
@@ -421,7 +422,7 @@ app.get('/api/sales', authenticate, async (req, res) => {
 });
 
 // Registrar nueva venta
-app.post('/api/sales', authenticate, async (req, res) => {
+app.post('/sales', authenticate, async (req, res) => {
     try {
         const userId = req.user.uid;
         const {
@@ -506,7 +507,7 @@ app.post('/api/sales', authenticate, async (req, res) => {
 // ==================== CONTROL DE ALIMENTOS (PROTEGIDO) ====================
 
 // Obtener todos los alimentos del usuario
-app.get('/api/feeds', authenticate, async (req, res) => {
+app.get('/feeds', authenticate, async (req, res) => {
     try {
         const userId = req.user.uid;
         const feedsSnapshot = await db.collection('feeds')
@@ -530,7 +531,7 @@ app.get('/api/feeds', authenticate, async (req, res) => {
 });
 
 // Registrar alimentación
-app.post('/api/feeds', authenticate, async (req, res) => {
+app.post('/feeds', authenticate, async (req, res) => {
     try {
         const userId = req.user.uid;
         const {
@@ -593,7 +594,7 @@ app.post('/api/feeds', authenticate, async (req, res) => {
 // ==================== GESTIÓN DE INVENTARIO (PROTEGIDO) ====================
 
 // Obtener todo el inventario del usuario
-app.get('/api/inventory', authenticate, async (req, res) => {
+app.get('/inventory', authenticate, async (req, res) => {
     try {
         const userId = req.user.uid;
         const inventorySnapshot = await db.collection('inventory')
@@ -616,7 +617,7 @@ app.get('/api/inventory', authenticate, async (req, res) => {
 });
 
 // Agregar item al inventario
-app.post('/api/inventory', authenticate, async (req, res) => {
+app.post('/inventory', authenticate, async (req, res) => {
     try {
         const userId = req.user.uid;
         const {
@@ -662,7 +663,7 @@ app.post('/api/inventory', authenticate, async (req, res) => {
 });
 
 // Actualizar stock del inventario
-app.put('/api/inventory/:id/stock', authenticate, async (req, res) => {
+app.put('/inventory/:id/stock', authenticate, async (req, res) => {
     try {
         const userId = req.user.uid;
         const inventoryId = req.params.id;
@@ -729,22 +730,22 @@ app.use('*', (req, res) => {
         method: req.method,
         availableEndpoints: [
             'GET    /',
-            'GET    /api/health',
-            'POST   /api/auth/create-admin',
-            'POST   /api/auth/verify',
-            'GET    /api/dashboard',
-            'GET    /api/animals',
-            'POST   /api/animals',
-            'GET    /api/animals/:id',
-            'PUT    /api/animals/:id',
-            'DELETE /api/animals/:id',
-            'GET    /api/sales', 
-            'POST   /api/sales',
-            'GET    /api/feeds',
-            'POST   /api/feeds',
-            'GET    /api/inventory',
-            'POST   /api/inventory',
-            'PUT    /api/inventory/:id/stock'
+            'GET    /health',
+            'POST   /auth/create-admin',
+            'POST   /auth/verify',
+            'GET    /dashboard',
+            'GET    /animals',
+            'POST   /animals',
+            'GET    /animals/:id',
+            'PUT    /animals/:id',
+            'DELETE /animals/:id',
+            'GET    /sales', 
+            'POST   /sales',
+            'GET    /feeds',
+            'POST   /feeds',
+            'GET    /inventory',
+            'POST   /inventory',
+            'PUT    /inventory/:id/stock'
         ]
     });
 });
