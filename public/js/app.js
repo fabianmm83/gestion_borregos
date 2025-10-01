@@ -81,23 +81,13 @@ getAuthErrorMessage(errorCode) {
 
 async handleRegister(form) {
     try {
-        console.log('🎯 handleRegister INICIADO');
         this.showLoading(true);
-        
         const name = document.getElementById('register-name').value;
         const email = document.getElementById('register-email').value;
         const password = document.getElementById('register-password').value;
 
-        console.log('📝 Datos del formulario:', { name, email, password: '***' });
+        console.log('Intentando crear cuenta:', { name, email });
 
-        if (!email || !password) {
-            console.log('❌ Campos vacíos');
-            this.showAlert('Email y contraseña son requeridos', 'danger');
-            return;
-        }
-
-        console.log('🔐 Llamando a Firebase Auth...');
-        
         // 1. Crear usuario en Firebase Auth
         const authResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${FIREBASE_API_KEY}`, {
             method: 'POST',
@@ -111,16 +101,13 @@ async handleRegister(form) {
             })
         });
 
-        console.log('📨 Respuesta de Auth recibida:', authResponse.status);
         const authData = await authResponse.json();
-        console.log('📊 Datos de Auth:', authData);
 
         if (authData.error) {
-            console.log('❌ Error de Auth:', authData.error);
             throw new Error(this.getAuthErrorMessage(authData.error.message));
         }
 
-        console.log('✅ Usuario creado en Auth:', authData.localId);
+        console.log('✅ Usuario creado en Auth:', authData);
 
         // 2. Guardar el token inmediatamente
         localStorage.setItem('authToken', authData.idToken);
@@ -130,11 +117,8 @@ async handleRegister(form) {
             name: name
         };
 
-        console.log('💾 Token guardado en localStorage');
-
         // 3. Crear perfil en nuestro backend (Firebase Functions)
         try {
-            console.log('🌐 Llamando a API para crear perfil...');
             const profileResponse = await this.apiCall('/auth/create-admin', {
                 method: 'POST',
                 body: { 
@@ -146,40 +130,31 @@ async handleRegister(form) {
             console.log('✅ Perfil creado en backend:', profileResponse);
         } catch (profileError) {
             console.warn('⚠️ Error creando perfil:', profileError);
+            // Continuamos aunque falle la creación del perfil
         }
 
-        console.log('🎉 Registro completado, mostrando app...');
         this.showAlert('¡Cuenta creada exitosamente!', 'success');
         this.showApp();
         this.loadDashboardData();
         
     } catch (error) {
-        console.error('💥 Error completo al registrar:', error);
+        console.error('❌ Error completo al registrar:', error);
         this.showAlert('Error al crear cuenta: ' + error.message, 'danger');
     } finally {
         this.showLoading(false);
-        console.log('🏁 handleRegister FINALIZADO');
     }
 }
 
 // Método para login
 async handleLogin(form) {
     try {
-        console.log('🎯 handleLogin INICIADO');
         this.showLoading(true);
         const email = document.getElementById('login-email').value;
         const password = document.getElementById('login-password').value;
 
-        console.log('📝 Intentando login:', { email });
-
-        if (!email || !password) {
-            console.log('❌ Campos vacíos');
-            this.showAlert('Email y contraseña son requeridos', 'danger');
-            return;
-        }
+        console.log('Intentando login:', { email });
 
         // Login con Firebase Auth
-        console.log('🔐 Llamando a Firebase Auth...');
         const authResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`, {
             method: 'POST',
             headers: {
@@ -192,16 +167,13 @@ async handleLogin(form) {
             })
         });
 
-        console.log('📨 Respuesta de Auth recibida:', authResponse.status);
         const authData = await authResponse.json();
-        console.log('📊 Datos de Auth:', authData);
 
         if (authData.error) {
-            console.log('❌ Error de Auth:', authData.error);
             throw new Error(this.getAuthErrorMessage(authData.error.message));
         }
 
-        console.log('✅ Login exitoso:', authData.localId);
+        console.log('✅ Login exitoso:', authData);
 
         // Guardar token y usuario
         localStorage.setItem('authToken', authData.idToken);
@@ -211,17 +183,15 @@ async handleLogin(form) {
             name: authData.displayName || email
         };
 
-        console.log('💾 Token guardado en localStorage');
         this.showAlert('¡Bienvenido!', 'success');
         this.showApp();
         this.loadDashboardData();
         
     } catch (error) {
-        console.error('💥 Error en login:', error);
+        console.error('❌ Error en login:', error);
         this.showAlert('Error al iniciar sesión: ' + error.message, 'danger');
     } finally {
         this.showLoading(false);
-        console.log('🏁 handleLogin FINALIZADO');
     }
 }
 

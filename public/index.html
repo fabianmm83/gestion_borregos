@@ -782,59 +782,30 @@
 
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-<script src="/js/app.js"></script>
-<script src="/js/animals.js"></script>
-<script src="/js/sales.js"></script>
-<script src="/js/feeds.js"></script>
-<script src="/js/inventory.js"></script>
-
-<script>
-// DEBUG SUPER SIMPLE - Esto SIEMPRE debe ejecutarse
-console.log('🔴 DEBUG INICIADO - Script ejecutándose');
-
-// Verificar elementos básicos
-console.log('📝 Formulario registro:', document.getElementById('register-form'));
-console.log('📝 Formulario login:', document.getElementById('login-form'));
-console.log('🚀 App:', window.app);
-
-// Probar Firebase Auth directamente
-console.log('🧪 Probando Firebase Auth...');
-fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=AIzaSyC7XrvX6AOAUP7dhd6yR4xIO0aqRwGe5nk`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-        email: 'test' + Date.now() + '@test.com',
-        password: 'password123',
-        returnSecureToken: true
-    })
-})
-.then(r => r.json())
-.then(data => {
-    console.log('🔥 Firebase Auth Result:', data);
-})
-.catch(err => {
-    console.log('💥 Firebase Auth Error:', err);
-});
-
-// Conexión MUY simple de formularios
-document.addEventListener('submit', function(e) {
-    console.log('🎯 Formulario enviado:', e.target.id);
-    e.preventDefault();
+    <!-- Scripts corregidos - rutas relativas -->
+    <script src="js/app.js"></script>
+    <script src="js/animals.js"></script>
+    <script src="js/sales.js"></script>
+    <script src="js/feeds.js"></script>
+    <script src="js/inventory.js"></script>
     
-    if (e.target.id === 'register-form' && window.app && window.app.handleRegister) {
-        console.log('🚀 Ejecutando handleRegister...');
-        window.app.handleRegister(e.target);
+    <script>
+    // DEBUG QUE NO PUEDE FALLAR
+    try {
+        console.log('🔴 DEBUG INICIADO - Esto DEBE verse');
+        
+        // Solo verificar que la página cargó
+        console.log('✅ Página cargada correctamente');
+        console.log('📝 Form registro:', !!document.getElementById('register-form'));
+        console.log('📝 Form login:', !!document.getElementById('login-form'));
+        
+        // Probar un fetch simple
+        console.log('🧪 Probando conexión...');
+        
+    } catch (error) {
+        console.log('💥 Error en debug:', error);
     }
-    
-    if (e.target.id === 'login-form' && window.app && window.app.handleLogin) {
-        console.log('🚀 Ejecutando handleLogin...');
-        window.app.handleLogin(e.target);
-    }
-});
-
-console.log('✅ Debug script terminado');
-</script>
-
+    </script>
 
 </body>
 </html>
