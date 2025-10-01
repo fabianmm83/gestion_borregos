@@ -40,6 +40,7 @@ app.get('/', (req, res) => {
             '/health',
             '/auth/create-admin',
             '/auth/verify',
+            '/initialize',
             '/dashboard',
             '/animals',
             '/sales',
@@ -178,6 +179,47 @@ app.post('/auth/verify', async (req, res) => {
     }
 });
 
+// ==================== ENDPOINT PARA INICIALIZAR COLECCIONES ====================
+
+app.post('/initialize', authenticate, async (req, res) => {
+    try {
+        const userId = req.user.uid;
+        
+        console.log('🔄 Inicializando colecciones para usuario:', userId);
+        
+        // Verificar y crear colecciones si no existen
+        const collections = ['animals', 'sales', 'feeds', 'inventory'];
+        
+        for (const collection of collections) {
+            try {
+                // Intentar crear un documento temporal para forzar la creación de la colección
+                const testDoc = await db.collection(collection).add({
+                    userId: userId,
+                    isInitializationDoc: true,
+                    createdAt: admin.firestore.FieldValue.serverTimestamp()
+                });
+                
+                // Eliminar el documento temporal
+                await db.collection(collection).doc(testDoc.id).delete();
+                
+                console.log(`✅ Colección ${collection} verificada/creada`);
+            } catch (error) {
+                console.log(`ℹ️ Colección ${collection} ya existe`);
+            }
+        }
+        
+        res.json({
+            message: 'Colecciones inicializadas exitosamente',
+            userId: userId,
+            collections: collections
+        });
+        
+    } catch (error) {
+        console.error('Error initializing collections:', error);
+        res.status(500).json({ error: 'Error al inicializar colecciones' });
+    }
+});
+
 // ==================== ENDPOINTS PROTEGIDOS DEL DASHBOARD ====================
 
 // Obtener datos del dashboard
@@ -293,6 +335,8 @@ app.post('/animals', authenticate, async (req, res) => {
             notes
         } = req.body;
 
+        console.log('📝 Recibiendo datos de animal:', req.body);
+
         // Validaciones básicas
         if (!earTag || !breed) {
             return res.status(400).json({ error: 'Número de arete y raza son obligatorios' });
@@ -314,7 +358,7 @@ app.post('/animals', authenticate, async (req, res) => {
             earTag,
             breed,
             birthDate: birthDate || null,
-            weight: weight || 0,
+            weight: weight ? parseFloat(weight) : 0,
             gender: gender || 'unknown',
             status,
             notes: notes || '',
@@ -322,16 +366,20 @@ app.post('/animals', authenticate, async (req, res) => {
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
         };
 
+        console.log('💾 Guardando animal en Firestore:', animalData);
+
         const docRef = await db.collection('animals').add(animalData);
         
+        console.log('✅ Animal guardado con ID:', docRef.id);
+
         res.status(201).json({
             id: docRef.id,
             message: 'Animal agregado exitosamente',
             ...animalData
         });
     } catch (error) {
-        console.error('Error adding animal:', error);
-        res.status(500).json({ error: 'Error al agregar animal' });
+        console.error('❌ Error adding animal:', error);
+        res.status(500).json({ error: 'Error al agregar animal: ' + error.message });
     }
 });
 
@@ -402,40 +450,29 @@ app.get('/sales', authenticate, async (req, res) => {
     try {
         const userId = req.user.uid;
         
-        // Intentar diferentes estrategias de consulta
         let salesSnapshot;
         
         try {
-            // Estrategia 1: Buscar con filtro de usuario
+            // Intentar con filtro de usuario
             salesSnapshot = await db.collection('sales')
                 .where('userId', '==', userId)
                 .orderBy('saleDate', 'desc')
                 .get();
                 
-            console.log(`✅ Estrategia 1: ${salesSnapshot.size} ventas encontradas`);
-            
         } catch (filterError) {
-            console.log('⚠️ Estrategia 1 falló, intentando sin filtro...');
+            console.log('⚠️ Filtro falló, obteniendo todas las ventas...');
             
-            // Estrategia 2: Traer todas las ventas y filtrar después
-            const allSalesSnapshot = await db.collection('sales')
-                .orderBy('saleDate', 'desc')
-                .get();
-                
-            // Filtrar manualmente por userId si existe el campo
+            // Obtener todas y filtrar después
+            const allSalesSnapshot = await db.collection('sales').get();
             const userSales = allSalesSnapshot.docs.filter(doc => {
                 const data = doc.data();
-                return data.userId === userId || 
-                       data.user_id === userId || 
-                       !data.userId; // Si no hay userId, asumir que son del usuario
+                return data.userId === userId;
             });
             
             salesSnapshot = {
                 docs: userSales,
                 size: userSales.length
             };
-            
-            console.log(`✅ Estrategia 2: ${salesSnapshot.size} ventas encontradas`);
         }
 
         const sales = salesSnapshot.docs.map(doc => {
@@ -443,10 +480,9 @@ app.get('/sales', authenticate, async (req, res) => {
             return {
                 id: doc.id,
                 ...data,
-                // Asegurar que los campos críticos existan
-                animalEarTag: data.animalEarTag || data.earTag || 'N/A',
-                animalName: data.animalName || data.name || 'Sin nombre',
-                salePrice: data.salePrice || data.price || 0,
+                animalEarTag: data.animalEarTag || 'N/A',
+                animalName: data.animalName || 'Sin nombre',
+                salePrice: data.salePrice || 0,
                 saleDate: data.saleDate?.toDate?.() || data.saleDate || new Date().toISOString(),
                 createdAt: data.createdAt?.toDate?.() || data.createdAt || null
             };
@@ -460,13 +496,13 @@ app.get('/sales', authenticate, async (req, res) => {
     }
 });
 
-// Registrar nueva venta
+// Registrar nueva venta - VERSIÓN CORREGIDA
 app.post('/sales', authenticate, async (req, res) => {
     try {
         const userId = req.user.uid;
         const {
-            animalId,
             animalEarTag,
+            animalName, // AGREGAR ESTE CAMPO
             saleDate,
             buyerName,
             buyerContact,
@@ -475,62 +511,69 @@ app.post('/sales', authenticate, async (req, res) => {
             notes
         } = req.body;
 
-        // Validaciones
-        if (!animalId && !animalEarTag) {
-            return res.status(400).json({ error: 'ID o número de arete del animal son obligatorios' });
+        console.log('📝 Recibiendo datos de venta:', req.body);
+
+        // Validaciones MÁS FLEXIBLES
+        if (!animalEarTag) {
+            return res.status(400).json({ error: 'Número de arete del animal es obligatorio' });
         }
 
-        if (!salePrice) {
-            return res.status(400).json({ error: 'Precio de venta es obligatorio' });
+        if (!salePrice || salePrice <= 0) {
+            return res.status(400).json({ error: 'Precio de venta válido es obligatorio' });
         }
 
-        let animalDoc;
-        if (animalId) {
-            animalDoc = await db.collection('animals').doc(animalId).get();
-        } else {
+        // Buscar animal por arete (OPCIONAL)
+        let animalId = null;
+        let existingAnimalData = null;
+        
+        try {
             const animalQuery = await db.collection('animals')
                 .where('userId', '==', userId)
                 .where('earTag', '==', animalEarTag)
                 .get();
                 
-            if (animalQuery.empty) {
-                return res.status(404).json({ error: 'Animal no encontrado' });
+            if (!animalQuery.empty) {
+                const animalDoc = animalQuery.docs[0];
+                animalId = animalDoc.id;
+                existingAnimalData = animalDoc.data();
+                console.log('✅ Animal encontrado:', animalId);
             }
-            animalDoc = animalQuery.docs[0];
+        } catch (error) {
+            console.log('ℹ️ No se encontró animal con arete:', animalEarTag);
         }
 
-        if (!animalDoc.exists) {
-            return res.status(404).json({ error: 'Animal no encontrado' });
-        }
-
-        // Verificar que el animal pertenece al usuario
-        const animalData = animalDoc.data();
-        if (animalData.userId !== userId) {
-            return res.status(403).json({ error: 'No tienes permisos para vender este animal' });
-        }
-
-        // Crear registro de venta
+        // Crear registro de venta - VERSIÓN MEJORADA
         const saleData = {
             userId,
-            animalId: animalDoc.id,
-            animalEarTag: animalData.earTag,
-            animalName: animalData.name,
-            saleDate: saleDate || new Date().toISOString(),
+            animalId: animalId,
+            animalEarTag: animalEarTag,
+            // USAR EL NOMBRE PROPORCIONADO O EL DEL ANIMAL EXISTENTE
+            animalName: animalName || existingAnimalData?.name || `Borrego ${animalEarTag}`,
+            saleDate: saleDate || new Date().toISOString().split('T')[0],
             buyerName: buyerName || '',
             buyerContact: buyerContact || '',
             salePrice: parseFloat(salePrice),
-            weightAtSale: weightAtSale || animalData.weight || 0,
+            weightAtSale: weightAtSale ? parseFloat(weightAtSale) : (existingAnimalData?.weight || 0),
             notes: notes || '',
             createdAt: admin.firestore.FieldValue.serverTimestamp()
         };
 
+        console.log('💾 Guardando venta en Firestore:', saleData);
+
         const saleRef = await db.collection('sales').add(saleData);
 
-        // Actualizar estado del animal a "vendido"
-        await db.collection('animals').doc(animalDoc.id).update({
-            status: 'sold',
-            updatedAt: admin.firestore.FieldValue.serverTimestamp()
-        });
+        // Si se encontró el animal, actualizar su estado a "vendido" (OPCIONAL)
+        if (animalId) {
+            try {
+                await db.collection('animals').doc(animalId).update({
+                    status: 'sold',
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+                });
+                console.log('✅ Animal marcado como vendido');
+            } catch (updateError) {
+                console.log('⚠️ No se pudo actualizar estado del animal:', updateError);
+            }
+        }
 
         res.status(201).json({
             id: saleRef.id,
@@ -538,8 +581,34 @@ app.post('/sales', authenticate, async (req, res) => {
             ...saleData
         });
     } catch (error) {
-        console.error('Error registering sale:', error);
-        res.status(500).json({ error: 'Error al registrar venta' });
+        console.error('❌ Error registering sale:', error);
+        res.status(500).json({ error: 'Error al registrar venta: ' + error.message });
+    }
+});
+
+// Eliminar venta
+app.delete('/sales/:id', authenticate, async (req, res) => {
+    try {
+        const userId = req.user.uid;
+        const saleId = req.params.id;
+        
+        // Verificar que la venta existe y pertenece al usuario
+        const saleDoc = await db.collection('sales').doc(saleId).get();
+        if (!saleDoc.exists) {
+            return res.status(404).json({ error: 'Venta no encontrada' });
+        }
+
+        const saleData = saleDoc.data();
+        if (saleData.userId !== userId) {
+            return res.status(403).json({ error: 'No tienes permisos para eliminar esta venta' });
+        }
+
+        await db.collection('sales').doc(saleId).delete();
+        
+        res.json({ message: 'Venta eliminada exitosamente' });
+    } catch (error) {
+        console.error('Error deleting sale:', error);
+        res.status(500).json({ error: 'Error al eliminar venta' });
     }
 });
 
@@ -557,7 +626,6 @@ app.get('/feeds', authenticate, async (req, res) => {
         const feeds = feedsSnapshot.docs.map(doc => ({
             id: doc.id,
             ...doc.data(),
-            // Convertir timestamps a formato legible
             feedingDate: doc.data().feedingDate?.toDate?.() || doc.data().feedingDate,
             createdAt: doc.data().createdAt?.toDate?.() || null
         }));
@@ -569,19 +637,20 @@ app.get('/feeds', authenticate, async (req, res) => {
     }
 });
 
-// Registrar alimentación
+// Registrar alimentación - VERSIÓN CORREGIDA
 app.post('/feeds', authenticate, async (req, res) => {
     try {
         const userId = req.user.uid;
         const {
-            animalId,
-            animalEarTag,
             feedType,
             quantity,
             unit,
             feedingDate,
-            notes
+            notes,
+            animalEarTag // AGREGAR compatibilidad con animalEarTag
         } = req.body;
+
+        console.log('📝 Recibiendo datos de alimentación:', req.body);
 
         if (!feedType || !quantity) {
             return res.status(400).json({ error: 'Tipo y cantidad de alimento son obligatorios' });
@@ -592,28 +661,27 @@ app.post('/feeds', authenticate, async (req, res) => {
             feedType,
             quantity: parseFloat(quantity),
             unit: unit || 'kg',
-            feedingDate: feedingDate || new Date().toISOString(),
+            feedingDate: feedingDate || new Date().toISOString().split('T')[0],
             notes: notes || '',
             createdAt: admin.firestore.FieldValue.serverTimestamp()
         };
 
-        // Si se especifica un animal, verificar que pertenece al usuario
-        if (animalId) {
-            const animalDoc = await db.collection('animals').doc(animalId).get();
-            if (animalDoc.exists && animalDoc.data().userId === userId) {
-                feedData.animalId = animalId;
-                feedData.animalEarTag = animalDoc.data().earTag;
-            }
-        } else if (animalEarTag) {
-            const animalQuery = await db.collection('animals')
-                .where('userId', '==', userId)
-                .where('earTag', '==', animalEarTag)
-                .get();
-                
-            if (!animalQuery.empty) {
-                const animalDoc = animalQuery.docs[0];
-                feedData.animalId = animalDoc.id;
-                feedData.animalEarTag = animalEarTag;
+        // SI SE PROPORCIONA animalEarTag, BUSCAR EL ANIMAL
+        if (animalEarTag) {
+            try {
+                const animalQuery = await db.collection('animals')
+                    .where('userId', '==', userId)
+                    .where('earTag', '==', animalEarTag)
+                    .get();
+                    
+                if (!animalQuery.empty) {
+                    const animalDoc = animalQuery.docs[0];
+                    feedData.animalId = animalDoc.id;
+                    feedData.animalEarTag = animalEarTag;
+                    console.log('✅ Animal asociado a alimentación:', animalEarTag);
+                }
+            } catch (error) {
+                console.log('ℹ️ No se pudo asociar animal a alimentación:', error);
             }
         }
 
@@ -626,7 +694,7 @@ app.post('/feeds', authenticate, async (req, res) => {
         });
     } catch (error) {
         console.error('Error registering feed:', error);
-        res.status(500).json({ error: 'Error al registrar alimentación' });
+        res.status(500).json({ error: 'Error al registrar alimentación: ' + error.message });
     }
 });
 
@@ -643,7 +711,6 @@ app.get('/inventory', authenticate, async (req, res) => {
         const inventory = inventorySnapshot.docs.map(doc => ({
             id: doc.id,
             ...doc.data(),
-            // Convertir timestamps a formato legible
             lastUpdated: doc.data().lastUpdated?.toDate?.() || null,
             createdAt: doc.data().createdAt?.toDate?.() || null
         }));
@@ -655,13 +722,14 @@ app.get('/inventory', authenticate, async (req, res) => {
     }
 });
 
-// Agregar item al inventario
+// Agregar item al inventario - VERSIÓN CORREGIDA
 app.post('/inventory', authenticate, async (req, res) => {
     try {
         const userId = req.user.uid;
         const {
             itemName,
-            category,
+            category, // MANTENER category
+            item_type, // AGREGAR item_type PARA COMPATIBILIDAD
             currentStock,
             minStock,
             unit,
@@ -670,14 +738,19 @@ app.post('/inventory', authenticate, async (req, res) => {
             notes
         } = req.body;
 
-        if (!itemName || !category) {
+        console.log('📝 Recibiendo datos de inventario:', req.body);
+
+        // USAR item_type SI category NO ESTÁ PRESENTE
+        const finalCategory = category || item_type;
+
+        if (!itemName || !finalCategory) {
             return res.status(400).json({ error: 'Nombre y categoría del item son obligatorios' });
         }
 
         const inventoryData = {
             userId,
             itemName,
-            category,
+            category: finalCategory, // USAR LA CATEGORÍA CORRECTA
             currentStock: parseFloat(currentStock) || 0,
             minStock: parseFloat(minStock) || 0,
             unit: unit || 'unidad',
@@ -697,7 +770,7 @@ app.post('/inventory', authenticate, async (req, res) => {
         });
     } catch (error) {
         console.error('Error adding inventory item:', error);
-        res.status(500).json({ error: 'Error al agregar item al inventario' });
+        res.status(500).json({ error: 'Error al agregar item al inventario: ' + error.message });
     }
 });
 
@@ -772,6 +845,7 @@ app.use('*', (req, res) => {
             'GET    /health',
             'POST   /auth/create-admin',
             'POST   /auth/verify',
+            'POST   /initialize',
             'GET    /dashboard',
             'GET    /animals',
             'POST   /animals',
@@ -780,6 +854,7 @@ app.use('*', (req, res) => {
             'DELETE /animals/:id',
             'GET    /sales', 
             'POST   /sales',
+            'DELETE /sales/:id',
             'GET    /feeds',
             'POST   /feeds',
             'GET    /inventory',
