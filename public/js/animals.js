@@ -11,7 +11,6 @@ class AnimalsManager {
     }
 
     setupEventListeners() {
-        // Formulario de animal
         const animalForm = document.getElementById('animal-form');
         if (animalForm) {
             animalForm.addEventListener('submit', (e) => this.handleAnimalSubmit(e));
@@ -21,38 +20,56 @@ class AnimalsManager {
     async loadAnimals() {
         try {
             this.app.showLoading(true);
-            // Simular datos para demo - reemplazar con API real
-            const animals = [
-                {
-                    id: 1,
-                    name: "Borrego 1",
-                    earTag: "A001",
-                    breed: "Katahdin",
-                    weight: 45.5,
-                    gender: "male",
-                    birthDate: "2023-05-15",
-                    status: "active",
-                    notes: "Primer borrego"
-                }
-            ];
+            console.log('🔄 Cargando animales desde API...');
+            
+            const animals = await this.app.apiCall('/animals');
+            console.log('✅ Animales cargados:', animals);
             this.renderAnimals(animals);
+            
         } catch (error) {
             console.error('Error loading animals:', error);
-            this.app.showAlert('Error al cargar los animales', 'danger');
+            
+            // Mostrar datos de demo si la API falla
+            if (error.message.includes('404') || error.message.includes('500')) {
+                this.app.showAlert('Usando datos de demostración', 'info');
+                const demoAnimals = this.getDemoAnimals();
+                this.renderAnimals(demoAnimals);
+            } else {
+                this.app.showAlert('Error al cargar los animales: ' + error.message, 'danger');
+            }
         } finally {
             this.app.showLoading(false);
         }
+    }
+
+    getDemoAnimals() {
+        return [
+            {
+                id: "demo-1",
+                name: "Borrego Demo",
+                earTag: "A001",
+                breed: "Katahdin",
+                weight: 45.5,
+                gender: "male",
+                birthDate: "2023-05-15",
+                status: "active",
+                notes: "Animal de demostración"
+            }
+        ];
     }
 
     renderAnimals(animals) {
         const container = document.getElementById('animals-list');
         if (!container) return;
 
-        if (animals.length === 0) {
+        if (!animals || animals.length === 0) {
             container.innerHTML = `
                 <div class="alert alert-info">
                     <i class="fas fa-info-circle me-2"></i>
                     No hay animales registrados.
+                    <button class="btn btn-primary btn-sm ms-2" onclick="animalsManager.showAnimalForm()">
+                        <i class="fas fa-plus me-1"></i>Agregar Primer Animal
+                    </button>
                 </div>
             `;
             return;
@@ -95,10 +112,10 @@ class AnimalsManager {
                             </span>
                             <div class="mt-2">
                                 <button class="btn btn-sm btn-outline-primary edit-animal-btn" data-id="${animal.id}">
-                                    <i class="fas fa-edit"></i>
+                                    <i class="fas fa-edit"></i> Editar
                                 </button>
                                 <button class="btn btn-sm btn-outline-danger delete-animal-btn" data-id="${animal.id}">
-                                    <i class="fas fa-trash"></i>
+                                    <i class="fas fa-trash"></i> Eliminar
                                 </button>
                             </div>
                         </div>
@@ -107,7 +124,6 @@ class AnimalsManager {
             </div>
         `).join('');
 
-        // Agregar event listeners a los botones
         this.attachAnimalEventListeners();
     }
 
@@ -134,26 +150,61 @@ class AnimalsManager {
             const formData = new FormData(form);
             const data = Object.fromEntries(formData);
 
+            console.log('📝 Datos del formulario:', data);
+
             // Validaciones básicas
             if (!data.earTag || !data.breed) {
                 this.app.showAlert('Número de arete y raza son obligatorios', 'warning');
                 return;
             }
 
-            // Simular guardado - reemplazar con API real
-            console.log('Guardando animal:', data);
-            
-            this.app.showAlert('Animal guardado exitosamente', 'success');
+            // Preparar datos para la API
+            const animalData = {
+                name: data.name || `Borrego ${data.earTag}`,
+                earTag: data.earTag,
+                breed: data.breed,
+                gender: data.gender || 'unknown',
+                birthDate: data.birthDate || null,
+                weight: data.weight ? parseFloat(data.weight) : 0,
+                notes: data.notes || '',
+                status: 'active'
+            };
+
+            console.log('🚀 Enviando a API:', animalData);
+
+            let result;
+            if (this.currentEditId && this.currentEditId !== 'null') {
+                // Editar animal existente
+                result = await this.app.apiCall(`/animals/${this.currentEditId}`, {
+                    method: 'PUT',
+                    body: animalData
+                });
+            } else {
+                // Crear nuevo animal
+                result = await this.app.apiCall('/animals', {
+                    method: 'POST',
+                    body: animalData
+                });
+            }
+
+            console.log('✅ Respuesta de API:', result);
+
+            this.app.showAlert(
+                this.currentEditId ? 'Animal actualizado exitosamente' : 'Animal guardado exitosamente', 
+                'success'
+            );
             
             // Cerrar modal y recargar
             const modal = bootstrap.Modal.getInstance(document.getElementById('animal-form-modal'));
             modal.hide();
             form.reset();
+            this.currentEditId = null;
+            
             await this.loadAnimals();
 
         } catch (error) {
-            console.error('Error saving animal:', error);
-            this.app.showAlert('Error al guardar el animal', 'danger');
+            console.error('❌ Error saving animal:', error);
+            this.app.showAlert('Error al guardar el animal: ' + error.message, 'danger');
         } finally {
             this.app.showLoading(false);
         }
@@ -162,26 +213,29 @@ class AnimalsManager {
     async editAnimal(animalId) {
         try {
             this.app.showLoading(true);
-            // Simular carga de animal - reemplazar con API real
-            const animal = {
-                id: animalId,
-                name: "Borrego 1",
-                earTag: "A001",
-                breed: "Katahdin",
-                weight: 45.5,
-                gender: "male",
-                birthDate: "2023-05-15",
-                notes: "Primer borrego"
-            };
+            console.log('✏️ Editando animal:', animalId);
+            
+            const animal = await this.app.apiCall(`/animals/${animalId}`);
+            console.log('📋 Animal cargado:', animal);
             
             // Poblar formulario
             const form = document.getElementById('animal-form');
-            Object.keys(animal).forEach(key => {
-                const input = form.querySelector(`[name="${key}"]`);
-                if (input) input.value = animal[key] || '';
+            const fields = ['name', 'earTag', 'breed', 'weight', 'gender', 'birthDate', 'notes'];
+            
+            fields.forEach(field => {
+                const input = form.querySelector(`[name="${field}"]`);
+                if (input && animal[field] !== undefined && animal[field] !== null) {
+                    input.value = animal[field];
+                }
             });
             
             this.currentEditId = animalId;
+            
+            // Actualizar título del modal
+            const modalTitle = document.querySelector('#animal-form-modal .modal-title');
+            if (modalTitle) {
+                modalTitle.innerHTML = '<i class="fas fa-edit me-2"></i>Editar Animal';
+            }
             
             // Mostrar modal
             const modal = new bootstrap.Modal(document.getElementById('animal-form-modal'));
@@ -189,7 +243,7 @@ class AnimalsManager {
 
         } catch (error) {
             console.error('Error loading animal for edit:', error);
-            this.app.showAlert('Error al cargar el animal', 'danger');
+            this.app.showAlert('Error al cargar el animal: ' + error.message, 'danger');
         } finally {
             this.app.showLoading(false);
         }
@@ -202,15 +256,17 @@ class AnimalsManager {
 
         try {
             this.app.showLoading(true);
-            // Simular eliminación - reemplazar con API real
-            console.log('Eliminando animal:', animalId);
+            
+            await this.app.apiCall(`/animals/${animalId}`, {
+                method: 'DELETE'
+            });
             
             this.app.showAlert('Animal eliminado exitosamente', 'success');
             await this.loadAnimals();
 
         } catch (error) {
             console.error('Error deleting animal:', error);
-            this.app.showAlert('Error al eliminar el animal', 'danger');
+            this.app.showAlert('Error al eliminar el animal: ' + error.message, 'danger');
         } finally {
             this.app.showLoading(false);
         }
@@ -223,7 +279,8 @@ class AnimalsManager {
         const cards = document.querySelectorAll('#animals-list .card');
         cards.forEach(card => {
             const text = card.textContent.toLowerCase();
-            const status = card.querySelector('.badge').textContent.toLowerCase();
+            const statusBadge = card.querySelector('.badge');
+            const status = statusBadge ? statusBadge.textContent.toLowerCase() : '';
             
             const matchesSearch = text.includes(searchTerm);
             const matchesStatus = !statusFilter || status.includes(statusFilter);
@@ -236,6 +293,13 @@ class AnimalsManager {
         this.currentEditId = null;
         const form = document.getElementById('animal-form');
         form.reset();
+        
+        // Restaurar título del modal
+        const modalTitle = document.querySelector('#animal-form-modal .modal-title');
+        if (modalTitle) {
+            modalTitle.innerHTML = '<i class="fas fa-plus-circle me-2"></i>Agregar Animal';
+        }
+        
         const modal = new bootstrap.Modal(document.getElementById('animal-form-modal'));
         modal.show();
     }
