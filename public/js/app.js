@@ -5,7 +5,7 @@ class App {
         this.FIREBASE_API_KEY = 'AIzaSyC7XrvX6AOAUP7dhd6yR4xIO0aqRwGe5nk';
         this.currentView = 'dashboard';
         this.currentUser = null;
-        this.databaseInitialized = false; // Nueva bandera
+        this.databaseInitialized = false; // Nueva bandera para controlar inicialización
         this.init();
     }
 
@@ -263,7 +263,7 @@ class App {
 
     async initializeDatabaseAfterLogin() {
         try {
-            console.log('🔄 Verificando estado de la base de datos...');
+            console.log('🔄 Verificando estado de la base de datos después del login...');
             
             // Esperar un poco para que la UI se estabilice
             setTimeout(async () => {
@@ -280,12 +280,14 @@ class App {
                     
                     if (success) {
                         // Recargar el dashboard para mostrar los nuevos datos
-                        this.loadDashboardData();
+                        setTimeout(() => {
+                            this.loadDashboardData();
+                        }, 1000);
                     }
                 } else {
                     console.log('✅ Base de datos ya inicializada o con datos existentes');
                 }
-            }, 2000); // Esperar 2 segundos después del login
+            }, 3000); // Esperar 3 segundos después del login para mayor estabilidad
             
         } catch (error) {
             console.error('Error en inicialización automática:', error);
@@ -463,7 +465,7 @@ class App {
     logout() {
         localStorage.removeItem('authToken');
         this.currentUser = null;
-        this.databaseInitialized = false; // Resetear bandera
+        this.databaseInitialized = false; // Resetear bandera al cerrar sesión
         this.showLogin();
         this.showAlert('Sesión cerrada correctamente', 'info');
     }
@@ -560,8 +562,6 @@ class App {
         });
     }
 
-    // ... (el resto del código permanece igual, manteniendo todas las otras funciones)
-
     // ==================== NAVEGACIÓN Y VISTAS ====================
 
     showView(viewName) {
@@ -615,8 +615,324 @@ class App {
         }
     }
 
-    // ... (mantener todas las otras funciones sin cambios)
+    // ==================== UTILIDADES UI ====================
 
+    showAlert(message, type = 'info', duration = 5000) {
+        const existingAlerts = document.querySelectorAll('.alert-dismissible');
+        existingAlerts.forEach(alert => {
+            if (alert.textContent.includes(message.substring(0, 20))) {
+                alert.remove();
+            }
+        });
+
+        const alertDiv = document.createElement('div');
+        alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+        alertDiv.innerHTML = `
+            <i class="fas fa-${this.getAlertIcon(type)} me-2"></i>
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+
+        const container = document.querySelector('.container');
+        if (container) {
+            container.insertBefore(alertDiv, container.firstChild);
+        }
+
+        if (duration > 0) {
+            setTimeout(() => {
+                if (alertDiv.parentNode) {
+                    alertDiv.remove();
+                }
+            }, duration);
+        }
+    }
+
+    getAlertIcon(type) {
+        const icons = {
+            'success': 'check-circle',
+            'danger': 'exclamation-triangle',
+            'warning': 'exclamation-triangle',
+            'info': 'info-circle'
+        };
+        return icons[type] || 'info-circle';
+    }
+
+    showLoading(show = true) {
+        const loadingElement = document.getElementById('loading-spinner');
+        if (loadingElement) {
+            loadingElement.style.display = show ? 'flex' : 'none';
+        }
+    }
+
+    createLoadingElement() {
+        if (document.getElementById('loading-spinner')) return;
+
+        const loadingDiv = document.createElement('div');
+        loadingDiv.id = 'loading-spinner';
+        loadingDiv.className = 'loading-spinner';
+        loadingDiv.innerHTML = `
+            <div class="text-center">
+                <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
+                    <span class="visually-hidden">Cargando...</span>
+                </div>
+                <p class="mt-2 text-white">Cargando...</p>
+            </div>
+        `;
+        loadingDiv.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        `;
+        document.body.appendChild(loadingDiv);
+    }
+
+    // ==================== MANEJO DE FORMULARIOS ====================
+
+    setupFormHandler(formId, submitCallback) {
+        const form = document.getElementById(formId);
+        if (form) {
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                await submitCallback(form);
+            });
+        }
+    }
+
+    getFormData(form) {
+        const formData = new FormData(form);
+        const data = {};
+        
+        for (let [key, value] of formData.entries()) {
+            if (value === '') continue;
+            
+            if (key.includes('price') || key.includes('weight') || 
+                key.includes('stock') || key.includes('quantity') ||
+                key.includes('amount')) {
+                data[key] = value ? parseFloat(value) : 0;
+            } else if (key.includes('date')) {
+                data[key] = value || new Date().toISOString().split('T')[0];
+            } else {
+                data[key] = value;
+            }
+        }
+        
+        return data;
+    }
+
+    resetForm(form) {
+        form.reset();
+        if (form.dataset.editId) {
+            delete form.dataset.editId;
+        }
+    }
+
+    populateForm(form, data) {
+        Object.keys(data).forEach(key => {
+            const input = form.querySelector(`[name="${key}"]`);
+            if (input) {
+                if (input.type === 'checkbox') {
+                    input.checked = data[key];
+                } else if (input.type === 'radio') {
+                    const radio = form.querySelector(`[name="${key}"][value="${data[key]}"]`);
+                    if (radio) radio.checked = true;
+                } else {
+                    input.value = data[key];
+                }
+            }
+        });
+    }
+
+    // ==================== MANEJO DE MODALES ====================
+
+    showModal(modalId, title = '') {
+        const modalElement = document.getElementById(modalId);
+        if (!modalElement) {
+            console.error(`Modal ${modalId} no encontrado`);
+            return;
+        }
+
+        if (title) {
+            const modalTitle = modalElement.querySelector('.modal-title');
+            if (modalTitle) modalTitle.textContent = title;
+        }
+
+        const modal = new bootstrap.Modal(modalElement);
+        modal.show();
+
+        modalElement.addEventListener('shown.bs.modal', () => {
+            const firstInput = modalElement.querySelector('input, select, textarea');
+            if (firstInput) firstInput.focus();
+        });
+    }
+
+    hideModal(modalId) {
+        const modalElement = document.getElementById(modalId);
+        if (modalElement) {
+            const modal = bootstrap.Modal.getInstance(modalElement);
+            if (modal) modal.hide();
+        }
+    }
+
+    // ==================== EVENT LISTENERS ====================
+
+    setupEventListeners() {
+        console.log('🔧 Configurando event listeners...');
+        this.connectFormsManually();
+
+        document.addEventListener('click', (e) => {
+            if (e.target.matches('[data-view]') || e.target.closest('[data-view]')) {
+                const target = e.target.matches('[data-view]') ? e.target : e.target.closest('[data-view]');
+                const view = target.getAttribute('data-view');
+                this.showView(view);
+            }
+        });
+
+        document.addEventListener('click', (e) => {
+            if (e.target.matches('#refresh-dashboard') || e.target.closest('#refresh-dashboard')) {
+                this.loadDashboardData();
+            }
+        });
+
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('modal')) {
+                this.hideModal(e.target.id);
+            }
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                const openModal = document.querySelector('.modal.show');
+                if (openModal) {
+                    this.hideModal(openModal.id);
+                }
+            }
+        });
+    }
+
+    connectFormsManually() {
+        console.log('🔗 Conectando formularios manualmente...');
+        
+        // Formulario de LOGIN
+        const loginForm = document.getElementById('login-form');
+        if (loginForm) {
+            console.log('✅ Login form encontrado, conectando...');
+            loginForm.onsubmit = async (e) => {
+                e.preventDefault();
+                console.log('🎯 Login form submitted - MANUAL');
+                await this.handleLogin(loginForm);
+            };
+        } else {
+            console.log('❌ Login form NO encontrado');
+        }
+        
+        // Formulario de REGISTRO
+        const registerForm = document.getElementById('register-form');
+        if (registerForm) {
+            console.log('✅ Register form encontrado, conectando...');
+            registerForm.onsubmit = async (e) => {
+                e.preventDefault();
+                console.log('🎯 Register form submitted - MANUAL');
+                await this.handleRegister(registerForm);
+            };
+        } else {
+            console.log('❌ Register form NO encontrado');
+        }
+        
+        // Botones de navegación login/register
+        const showRegisterLinks = document.querySelectorAll('a[href="#"][onclick*="showRegister"]');
+        showRegisterLinks.forEach(link => {
+            link.onclick = (e) => {
+                e.preventDefault();
+                console.log('🔄 Mostrando registro');
+                this.showRegister();
+            };
+        });
+        
+        const showLoginLinks = document.querySelectorAll('a[href="#"][onclick*="showLogin"]');
+        showLoginLinks.forEach(link => {
+            link.onclick = (e) => {
+                e.preventDefault();
+                console.log('🔄 Mostrando login');
+                this.showLogin();
+            };
+        });
+    }
+
+    // ==================== MÉTODOS PARA DATOS GLOBALES ====================
+
+    async getActiveAnimals() {
+        try {
+            const animals = await this.apiCall('/animals');
+            return animals.filter(animal => 
+                animal.status === 'active' || !animal.status
+            );
+        } catch (error) {
+            console.error('Error getting active animals:', error);
+            return [];
+        }
+    }
+
+    async getInventoryItems() {
+        try {
+            return await this.apiCall('/inventory');
+        } catch (error) {
+            console.error('Error getting inventory:', error);
+            return [];
+        }
+    }
+
+    // ==================== FORMATO DE DATOS ====================
+
+    formatCurrency(amount) {
+        return new Intl.NumberFormat('es-MX', {
+            style: 'currency',
+            currency: 'MXN'
+        }).format(amount);
+    }
+
+    formatDate(dateString) {
+        if (!dateString) return 'N/A';
+        return new Date(dateString).toLocaleDateString('es-MX');
+    }
+
+    formatDateTime(dateString) {
+        if (!dateString) return 'N/A';
+        return new Date(dateString).toLocaleString('es-MX');
+    }
+
+    // ==================== MANEJO DE ERRORES ====================
+
+    handleError(error, context = '') {
+        console.error(`Error en ${context}:`, error);
+        
+        let userMessage = 'Ocurrió un error inesperado';
+        
+        if (error.message.includes('404')) {
+            userMessage = 'Recurso no encontrado';
+        } else if (error.message.includes('500')) {
+            userMessage = 'Error del servidor';
+        } else if (error.message.includes('NetworkError')) {
+            userMessage = 'Error de conexión. Verifica tu internet.';
+        }
+        
+        this.showAlert(`${context ? context + ': ' : ''}${userMessage}`, 'danger');
+    }
+
+    // ==================== INICIALIZACIÓN ====================
+
+    static init() {
+        if (!window.app) {
+            window.app = new App();
+        }
+        return window.app;
+    }
 }
 
 // CONEXIÓN GARANTIZADA - Ejecutar después de que todo esté cargado
