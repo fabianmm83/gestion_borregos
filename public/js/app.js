@@ -5,8 +5,16 @@ class App {
         this.FIREBASE_API_KEY = 'AIzaSyC7XrvX6AOAUP7dhd6yR4xIO0aqRwGe5nk';
         this.currentView = 'dashboard';
         this.currentUser = null;
-        this.databaseInitialized = false; // Nueva bandera para controlar inicialización
-        this.init();
+        this.databaseInitialized = false;
+    }
+
+    // Método estático para crear instancia
+    static create() {
+        if (!window.app) {
+            window.app = new App();
+            window.app.init();
+        }
+        return window.app;
     }
 
     init() {
@@ -287,7 +295,7 @@ class App {
                 } else {
                     console.log('✅ Base de datos ya inicializada o con datos existentes');
                 }
-            }, 3000); // Esperar 3 segundos después del login para mayor estabilidad
+            }, 3000);
             
         } catch (error) {
             console.error('Error en inicialización automática:', error);
@@ -465,7 +473,7 @@ class App {
     logout() {
         localStorage.removeItem('authToken');
         this.currentUser = null;
-        this.databaseInitialized = false; // Resetear bandera al cerrar sesión
+        this.databaseInitialized = false;
         this.showLogin();
         this.showAlert('Sesión cerrada correctamente', 'info');
     }
@@ -483,7 +491,6 @@ class App {
                 ...options
             };
 
-            // Agregar token de autenticación si existe y no es endpoint público
             if (token && !endpoint.includes('/auth/') && endpoint !== '/health') {
                 config.headers['Authorization'] = `Bearer ${token}`;
             }
@@ -514,7 +521,6 @@ class App {
             console.error('❌ API Call error:', error);
             
             if (!error.message.includes('Sesión expirada')) {
-                // No mostrar alerta para errores 404 de colecciones vacías
                 if (!error.message.includes('404') || !error.message.includes('no encontrado')) {
                     this.showAlert('Error en la conexión: ' + error.message, 'danger');
                 }
@@ -533,11 +539,9 @@ class App {
             this.updateDashboardUI(data);
         } catch (error) {
             console.error('Error loading dashboard:', error);
-            // No mostrar error para dashboard vacío
             if (!error.message.includes('404') || !error.message.includes('no encontrado')) {
                 this.showAlert('Error al cargar el dashboard: ' + error.message, 'danger');
             }
-            // Actualizar UI con valores por defecto
             this.updateDashboardUI({});
         } finally {
             this.showLoading(false);
@@ -924,15 +928,6 @@ class App {
         
         this.showAlert(`${context ? context + ': ' : ''}${userMessage}`, 'danger');
     }
-
-    // ==================== INICIALIZACIÓN ====================
-
-    static init() {
-        if (!window.app) {
-            window.app = new App();
-        }
-        return window.app;
-    }
 }
 
 // CONEXIÓN GARANTIZADA - Ejecutar después de que todo esté cargado
@@ -942,7 +937,7 @@ function initializeAppWithRetry() {
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => {
             console.log('📄 DOM completamente cargado');
-            const app = App.init();
+            const app = App.create();
             
             setTimeout(() => {
                 if (app && app.connectFormsManually) {
@@ -952,7 +947,7 @@ function initializeAppWithRetry() {
         });
     } else {
         console.log('📄 DOM ya está cargado');
-        const app = App.init();
+        const app = App.create();
         setTimeout(() => {
             if (app && app.connectFormsManually) {
                 app.connectFormsManually();
