@@ -612,28 +612,56 @@ app.delete('/sales/:id', authenticate, async (req, res) => {
     }
 });
 
-// ==================== CONTROL DE ALIMENTOS (PROTEGIDO) ====================
 
-// Obtener todos los alimentos del usuario
+// ==================== CONTROL DE ALIMENTOS (PROTEGIDO) - VERSIÓN CORREGIDA ====================
+
+// Obtener todos los alimentos del usuario - VERSIÓN CORREGIDA
 app.get('/feeds', authenticate, async (req, res) => {
     try {
         const userId = req.user.uid;
-        const feedsSnapshot = await db.collection('feeds')
-            .where('userId', '==', userId)
-            .orderBy('feedingDate', 'desc')
-            .get();
-            
-        const feeds = feedsSnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data(),
-            feedingDate: doc.data().feedingDate?.toDate?.() || doc.data().feedingDate,
-            createdAt: doc.data().createdAt?.toDate?.() || null
-        }));
+        console.log('🔄 Obteniendo alimentos para usuario:', userId);
         
+        let feedsSnapshot;
+        
+        try {
+            // Intentar con filtro de usuario
+            feedsSnapshot = await db.collection('feeds')
+                .where('userId', '==', userId)
+                .orderBy('feedingDate', 'desc')
+                .get();
+                
+        } catch (filterError) {
+            console.log('⚠️ Filtro falló, obteniendo todos los alimentos...');
+            
+            // Obtener todas y filtrar después
+            const allFeedsSnapshot = await db.collection('feeds').get();
+            const userFeeds = allFeedsSnapshot.docs.filter(doc => {
+                const data = doc.data();
+                return data.userId === userId;
+            });
+            
+            feedsSnapshot = {
+                docs: userFeeds,
+                size: userFeeds.length
+            };
+        }
+
+        const feeds = feedsSnapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                ...data,
+                feedingDate: data.feedingDate?.toDate?.() || data.feedingDate,
+                createdAt: data.createdAt?.toDate?.() || null
+            };
+        });
+        
+        console.log(`✅ ${feeds.length} alimentos encontrados`);
         res.json(feeds);
+        
     } catch (error) {
-        console.error('Error getting feeds:', error);
-        res.status(500).json({ error: 'Error al obtener alimentos' });
+        console.error('❌ Error getting feeds:', error);
+        res.status(500).json({ error: 'Error al obtener alimentos: ' + error.message });
     }
 });
 
@@ -646,12 +674,13 @@ app.post('/feeds', authenticate, async (req, res) => {
             quantity,
             unit,
             feedingDate,
-            notes,
-            animalEarTag // AGREGAR compatibilidad con animalEarTag
+            animalEarTag,
+            notes
         } = req.body;
 
         console.log('📝 Recibiendo datos de alimentación:', req.body);
 
+        // Validaciones
         if (!feedType || !quantity) {
             return res.status(400).json({ error: 'Tipo y cantidad de alimento son obligatorios' });
         }
@@ -666,7 +695,7 @@ app.post('/feeds', authenticate, async (req, res) => {
             createdAt: admin.firestore.FieldValue.serverTimestamp()
         };
 
-        // SI SE PROPORCIONA animalEarTag, BUSCAR EL ANIMAL
+        // Si se proporciona animalEarTag, buscar el animal
         if (animalEarTag) {
             try {
                 const animalQuery = await db.collection('animals')
@@ -679,11 +708,19 @@ app.post('/feeds', authenticate, async (req, res) => {
                     feedData.animalId = animalDoc.id;
                     feedData.animalEarTag = animalEarTag;
                     console.log('✅ Animal asociado a alimentación:', animalEarTag);
+                } else {
+                    console.log('⚠️ No se encontró animal con arete:', animalEarTag);
+                    // Aún así guardar el arete para referencia
+                    feedData.animalEarTag = animalEarTag;
                 }
-            } catch (error) {
-                console.log('ℹ️ No se pudo asociar animal a alimentación:', error);
+            } catch (animalError) {
+                console.log('⚠️ Error buscando animal:', animalError);
+                // Continuar sin asociar animal
+                feedData.animalEarTag = animalEarTag;
             }
         }
+
+        console.log('💾 Guardando alimentación en Firestore:', feedData);
 
         const feedRef = await db.collection('feeds').add(feedData);
 
@@ -692,11 +729,13 @@ app.post('/feeds', authenticate, async (req, res) => {
             message: 'Alimentación registrada exitosamente',
             ...feedData
         });
+        
     } catch (error) {
-        console.error('Error registering feed:', error);
+        console.error('❌ Error registering feed:', error);
         res.status(500).json({ error: 'Error al registrar alimentación: ' + error.message });
     }
 });
+
 
 // ==================== GESTIÓN DE INVENTARIO (PROTEGIDO) ====================
 
