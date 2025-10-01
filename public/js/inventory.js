@@ -32,66 +32,58 @@ class InventoryManager {
     async loadInventory() {
         try {
             this.app.showLoading(true);
-            // Simular datos para demo
-            const inventory = [
-                {
-                    id: 1,
-                    item_type: "medicine",
-                    itemName: "Antibiótico Ovinos",
-                    currentStock: 5,
-                    minStock: 10,
-                    unit: "unidades",
-                    price: 150.00,
-                    supplier: "Farmacia Veterinaria SA",
-                    purchase_date: "2024-01-01",
-                    expiration_date: "2024-12-31",
-                    notes: "Antibiótico de amplio espectro"
-                },
-                {
-                    id: 2,
-                    item_type: "supplies",
-                    itemName: "Alimento Concentrado",
-                    currentStock: 500,
-                    minStock: 100,
-                    unit: "kg",
-                    price: 25.50,
-                    supplier: "Alimentos Premium",
-                    purchase_date: "2024-01-05",
-                    expiration_date: "2024-06-30",
-                    notes: "Alimento para crecimiento"
-                },
-                {
-                    id: 3,
-                    item_type: "tools",
-                    itemName: "Tijeras de Esquila",
-                    currentStock: 2,
-                    minStock: 1,
-                    unit: "unidades",
-                    price: 450.00,
-                    supplier: "Herramientas Agro",
-                    purchase_date: "2023-12-15",
-                    notes: "Tijeras profesionales para esquila"
-                }
-            ];
+            console.log('🔄 Cargando inventario desde API...');
+            
+            const inventory = await this.app.apiCall('/inventory');
+            console.log('✅ Inventario cargado:', inventory);
             this.renderInventory(inventory);
             this.updateStats(inventory);
+            
         } catch (error) {
             console.error('Error loading inventory:', error);
-            this.app.showAlert('Error al cargar el inventario', 'danger');
+            
+            // Mostrar datos de demo si la API falla
+            if (error.message.includes('404') || error.message.includes('500')) {
+                this.app.showAlert('Usando datos de demostración', 'info');
+                const demoInventory = this.getDemoInventory();
+                this.renderInventory(demoInventory);
+                this.updateStats(demoInventory);
+            } else {
+                this.app.showAlert('Error al cargar el inventario: ' + error.message, 'danger');
+            }
         } finally {
             this.app.showLoading(false);
         }
+    }
+
+    getDemoInventory() {
+        return [
+            {
+                id: "demo-1",
+                itemName: "Antibiótico Ovinos",
+                category: "medicine",
+                currentStock: 5,
+                minStock: 10,
+                unit: "unidades",
+                price: 150.00,
+                supplier: "Farmacia Veterinaria SA",
+                notes: "Antibiótico de amplio espectro"
+            }
+        ];
     }
 
     renderInventory(inventory) {
         const container = document.getElementById('inventory-list');
         if (!container) return;
 
-        if (inventory.length === 0) {
+        if (!inventory || inventory.length === 0) {
             container.innerHTML = `
                 <div class="alert alert-info">
                     <i class="fas fa-info-circle me-2"></i>
                     No hay items en el inventario.
+                    <button class="btn btn-primary btn-sm ms-2" onclick="inventoryManager.showInventoryForm()">
+                        <i class="fas fa-plus me-1"></i>Agregar Primer Item
+                    </button>
                 </div>
             `;
             return;
@@ -101,7 +93,7 @@ class InventoryManager {
             const isLowStock = item.currentStock <= item.minStock;
             const stockClass = isLowStock ? 'bg-danger' : 'bg-success';
             const stockText = isLowStock ? 'Stock Bajo' : 'Stock OK';
-            const itemTypeText = this.getItemTypeText(item.item_type);
+            const itemTypeText = this.getItemTypeText(item.category);
 
             return `
                 <div class="card mb-3 ${isLowStock ? 'border-warning' : ''}">
@@ -109,7 +101,7 @@ class InventoryManager {
                         <div class="row">
                             <div class="col-md-8">
                                 <h5 class="card-title">
-                                    <i class="${this.getItemTypeIcon(item.item_type)} me-2"></i>
+                                    <i class="${this.getItemTypeIcon(item.category)} me-2"></i>
                                     ${this.escapeHtml(item.itemName)}
                                 </h5>
                                 <p class="card-text mb-1">
@@ -125,7 +117,7 @@ class InventoryManager {
                                     <strong>Stock Mínimo:</strong> ${item.minStock} ${item.unit}
                                 </p>
                                 <p class="card-text mb-1">
-                                    <strong>Precio:</strong> $${parseFloat(item.price).toLocaleString()}
+                                    <strong>Precio:</strong> $${parseFloat(item.price || 0).toLocaleString()}
                                 </p>
                                 <p class="card-text mb-1">
                                     <strong>Proveedor:</strong> ${this.escapeHtml(item.supplier || 'N/A')}
@@ -212,6 +204,8 @@ class InventoryManager {
             const formData = new FormData(form);
             const data = Object.fromEntries(formData);
 
+            console.log('📝 Datos del formulario de inventario:', data);
+
             // Validaciones
             if (!data.item_type || !data.itemName || !data.currentStock || !data.minStock) {
                 this.app.showAlert('Todos los campos obligatorios deben ser completados', 'warning');
@@ -223,19 +217,53 @@ class InventoryManager {
                 return;
             }
 
-            // Simular guardado
-            console.log('Guardando item de inventario:', data);
+            // Preparar datos para la API
+            const inventoryData = {
+                itemName: data.itemName,
+                category: data.item_type, // Usar item_type como category
+                currentStock: parseInt(data.currentStock),
+                minStock: parseInt(data.minStock),
+                unit: data.unit || 'unidad',
+                price: data.price ? parseFloat(data.price) : 0,
+                supplier: data.supplier || '',
+                notes: data.notes || ''
+            };
+
+            console.log('🚀 Enviando a API:', inventoryData);
+
+            let result;
+            if (this.currentEditId && this.currentEditId !== 'null') {
+                // Editar item existente
+                result = await this.app.apiCall(`/inventory/${this.currentEditId}`, {
+                    method: 'PUT',
+                    body: inventoryData
+                });
+            } else {
+                // Crear nuevo item
+                result = await this.app.apiCall('/inventory', {
+                    method: 'POST',
+                    body: inventoryData
+                });
+            }
+
+            console.log('✅ Respuesta de API:', result);
+
+            this.app.showAlert(
+                this.currentEditId ? 'Item actualizado exitosamente' : 'Item agregado al inventario exitosamente', 
+                'success'
+            );
             
-            this.app.showAlert('Item guardado en inventario exitosamente', 'success');
-            
+            // Cerrar modal y recargar
             const modal = bootstrap.Modal.getInstance(document.getElementById('inventory-form-modal'));
             modal.hide();
             form.reset();
+            this.currentEditId = null;
+            
             await this.loadInventory();
 
         } catch (error) {
-            console.error('Error saving inventory item:', error);
-            this.app.showAlert('Error al guardar el item', 'danger');
+            console.error('❌ Error saving inventory item:', error);
+            this.app.showAlert('Error al guardar el item: ' + error.message, 'danger');
         } finally {
             this.app.showLoading(false);
         }
@@ -244,36 +272,43 @@ class InventoryManager {
     async editInventory(itemId) {
         try {
             this.app.showLoading(true);
-            // Simular carga de item - reemplazar con API real
-            const item = {
-                id: itemId,
-                item_type: "medicine",
-                itemName: "Antibiótico Ovinos",
-                currentStock: 5,
-                minStock: 10,
-                unit: "unidades",
-                price: 150.00,
-                supplier: "Farmacia Veterinaria SA",
-                purchase_date: "2024-01-01",
-                expiration_date: "2024-12-31",
-                notes: "Antibiótico de amplio espectro"
-            };
+            console.log('✏️ Editando item:', itemId);
+            
+            const item = await this.app.apiCall(`/inventory/${itemId}`);
+            console.log('📋 Item cargado:', item);
             
             // Poblar formulario
             const form = document.getElementById('inventory-form');
-            Object.keys(item).forEach(key => {
-                const input = form.querySelector(`[name="${key}"]`);
-                if (input) input.value = item[key] || '';
+            const fields = ['itemName', 'currentStock', 'minStock', 'unit', 'price', 'supplier', 'notes'];
+            
+            fields.forEach(field => {
+                const input = form.querySelector(`[name="${field}"]`);
+                if (input && item[field] !== undefined && item[field] !== null) {
+                    input.value = item[field];
+                }
             });
+
+            // Establecer el tipo de item
+            const typeSelect = form.querySelector('[name="item_type"]');
+            if (typeSelect && item.category) {
+                typeSelect.value = item.category;
+            }
             
             this.currentEditId = itemId;
             
+            // Actualizar título del modal
+            const modalTitle = document.querySelector('#inventory-form-modal .modal-title');
+            if (modalTitle) {
+                modalTitle.innerHTML = '<i class="fas fa-edit me-2"></i>Editar Item';
+            }
+            
+            // Mostrar modal
             const modal = new bootstrap.Modal(document.getElementById('inventory-form-modal'));
             modal.show();
 
         } catch (error) {
             console.error('Error loading inventory item for edit:', error);
-            this.app.showAlert('Error al cargar el item', 'danger');
+            this.app.showAlert('Error al cargar el item: ' + error.message, 'danger');
         } finally {
             this.app.showLoading(false);
         }
@@ -286,15 +321,17 @@ class InventoryManager {
 
         try {
             this.app.showLoading(true);
-            // Simular eliminación
-            console.log('Eliminando item:', itemId);
+            
+            await this.app.apiCall(`/inventory/${itemId}`, {
+                method: 'DELETE'
+            });
             
             this.app.showAlert('Item eliminado del inventario exitosamente', 'success');
             await this.loadInventory();
 
         } catch (error) {
             console.error('Error deleting inventory item:', error);
-            this.app.showAlert('Error al eliminar el item', 'danger');
+            this.app.showAlert('Error al eliminar el item: ' + error.message, 'danger');
         } finally {
             this.app.showLoading(false);
         }
@@ -303,16 +340,12 @@ class InventoryManager {
     async showStockUpdate(itemId) {
         try {
             this.app.showLoading(true);
-            // Simular carga de item
-            const item = {
-                id: itemId,
-                itemName: "Antibiótico Ovinos",
-                currentStock: 5,
-                unit: "unidades"
-            };
+            
+            const item = await this.app.apiCall(`/inventory/${itemId}`);
             
             // Configurar modal
             document.getElementById('update-current-stock').value = item.currentStock;
+            document.getElementById('update-item-name').textContent = item.itemName;
             this.currentStockUpdateId = itemId;
             
             const modal = new bootstrap.Modal(document.getElementById('stock-update-modal'));
@@ -320,7 +353,7 @@ class InventoryManager {
 
         } catch (error) {
             console.error('Error loading item for stock update:', error);
-            this.app.showAlert('Error al cargar el item', 'danger');
+            this.app.showAlert('Error al cargar el item: ' + error.message, 'danger');
         } finally {
             this.app.showLoading(false);
         }
@@ -355,8 +388,15 @@ class InventoryManager {
                     break;
             }
 
-            // Simular actualización
-            console.log(`Actualizando stock del item ${this.currentStockUpdateId}: ${currentStock} -> ${newStock}`);
+            // Actualizar stock
+            await this.app.apiCall(`/inventory/${this.currentStockUpdateId}/stock`, {
+                method: 'PUT',
+                body: {
+                    operation: data.operation,
+                    quantity: quantity,
+                    newStock: newStock
+                }
+            });
             
             this.app.showAlert('Stock actualizado exitosamente', 'success');
             
@@ -367,7 +407,7 @@ class InventoryManager {
 
         } catch (error) {
             console.error('Error updating stock:', error);
-            this.app.showAlert('Error al actualizar el stock', 'danger');
+            this.app.showAlert('Error al actualizar el stock: ' + error.message, 'danger');
         } finally {
             this.app.showLoading(false);
         }
@@ -390,6 +430,13 @@ class InventoryManager {
         this.currentEditId = null;
         const form = document.getElementById('inventory-form');
         form.reset();
+        
+        // Restaurar título del modal
+        const modalTitle = document.querySelector('#inventory-form-modal .modal-title');
+        if (modalTitle) {
+            modalTitle.innerHTML = '<i class="fas fa-plus-circle me-2"></i>Agregar al Inventario';
+        }
+        
         const modal = new bootstrap.Modal(document.getElementById('inventory-form-modal'));
         modal.show();
     }
