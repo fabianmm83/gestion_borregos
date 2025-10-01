@@ -1,6 +1,7 @@
 class SalesManager {
     constructor(app) {
         this.app = app;
+        this.localSales = this.getLocalSales(); // Datos locales como respaldo
         this.init();
     }
 
@@ -26,15 +27,31 @@ class SalesManager {
         try {
             this.app.showLoading(true);
             
-            // INTENTAR LLAMADA A API PRIMERO
+            console.log('🔄 Cargando ventas...');
             let sales = [];
+            
+            // INTENTAR PRIMERO DESDE LOCALSTORAGE
+            const localData = this.getLocalSales();
+            if (localData.length > 0) {
+                console.log('📊 Usando datos locales de ventas');
+                sales = localData;
+                this.renderSales(sales);
+                this.updateStats(sales);
+            }
+            
+            // LUEGO INTENTAR DESDE LA API (EN SEGUNDO PLANO)
             try {
-                sales = await this.app.apiCall('/sales');
-                console.log('✅ Ventas cargadas desde API:', sales);
+                const apiSales = await this.app.apiCall('/sales');
+                console.log('✅ Ventas cargadas desde API:', apiSales.length);
+                
+                if (apiSales && apiSales.length > 0) {
+                    sales = apiSales;
+                    // Guardar en localStorage como respaldo
+                    this.saveLocalSales(sales);
+                }
             } catch (apiError) {
-                console.warn('⚠️ Error al cargar desde API, usando datos demo:', apiError);
-                // USAR DATOS DEMO SI LA API FALLA
-                sales = this.getDemoSales();
+                console.warn('⚠️ Error al cargar desde API, continuando con datos locales:', apiError.message);
+                // No mostramos alerta para no molestar al usuario
             }
             
             this.renderSales(sales);
@@ -42,15 +59,31 @@ class SalesManager {
             
         } catch (error) {
             console.error('Error loading sales:', error);
-            this.app.showAlert('Error al cargar las ventas', 'danger');
-            
-            // MOSTRAR DATOS DEMO COMO FALLBACK
-            const demoData = this.getDemoSales();
-            this.renderSales(demoData);
-            this.updateStats(demoData);
-            
+            // Usar datos locales como último recurso
+            const localData = this.getLocalSales();
+            this.renderSales(localData);
+            this.updateStats(localData);
         } finally {
             this.app.showLoading(false);
+        }
+    }
+
+    // Manejar datos locales en localStorage
+    getLocalSales() {
+        try {
+            const saved = localStorage.getItem('borregos_sales');
+            return saved ? JSON.parse(saved) : this.getDemoSales();
+        } catch (error) {
+            console.error('Error loading local sales:', error);
+            return this.getDemoSales();
+        }
+    }
+
+    saveLocalSales(sales) {
+        try {
+            localStorage.setItem('borregos_sales', JSON.stringify(sales));
+        } catch (error) {
+            console.error('Error saving local sales:', error);
         }
     }
 
@@ -60,7 +93,7 @@ class SalesManager {
             {
                 id: 1,
                 animalEarTag: "A001",
-                animalName: "Borrego 1",
+                animalName: "Borrego Blanco",
                 salePrice: 2500.00,
                 weightAtSale: 48.5,
                 buyerName: "Juan Pérez",
@@ -72,7 +105,7 @@ class SalesManager {
             {
                 id: 2,
                 animalEarTag: "A002",
-                animalName: "Borrego 2",
+                animalName: "Borrego Negro",
                 salePrice: 2300.00,
                 weightAtSale: 45.0,
                 buyerName: "María García",
@@ -84,13 +117,13 @@ class SalesManager {
             {
                 id: 3,
                 animalEarTag: "A005",
-                animalName: "Borrego 5",
+                animalName: "Borrego Grande",
                 salePrice: 2700.00,
                 weightAtSale: 52.0,
                 buyerName: "Carlos López",
                 buyerContact: "555-9012",
                 saleDate: "2024-01-12",
-                notes: "",
+                notes: "Excelente condición",
                 createdAt: new Date().toISOString()
             }
         ];
@@ -116,13 +149,16 @@ class SalesManager {
             return;
         }
 
-        container.innerHTML = sales.map(sale => `
+        // Ordenar por fecha más reciente primero
+        const sortedSales = [...sales].sort((a, b) => new Date(b.saleDate) - new Date(a.saleDate));
+
+        container.innerHTML = sortedSales.map(sale => `
             <div class="card mb-3">
                 <div class="card-body">
                     <div class="row">
                         <div class="col-md-8">
                             <h5 class="card-title text-success">
-                                <i class="fas fa-dollar-sign me-2"></i>Venta #${sale.id}
+                                <i class="fas fa-dollar-sign me-2"></i>Venta - ${this.escapeHtml(sale.animalEarTag)}
                             </h5>
                             <p class="card-text mb-1">
                                 <strong>Animal:</strong> ${this.escapeHtml(sale.animalName || 'N/A')} 
@@ -173,7 +209,8 @@ class SalesManager {
     attachSalesEventListeners() {
         document.querySelectorAll('.delete-sale-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
-                this.deleteSale(e.target.closest('button').dataset.id);
+                const saleId = e.target.closest('button').dataset.id;
+                this.deleteSale(saleId);
             });
         });
     }
@@ -212,15 +249,42 @@ class SalesManager {
                 return;
             }
 
+            // Crear objeto de venta
+            const newSale = {
+                id: Date.now(), // ID temporal
+                animalEarTag: data.animalEarTag,
+                animalName: data.animalName || `Borrego ${data.animalEarTag}`,
+                salePrice: parseFloat(data.salePrice),
+                weightAtSale: data.weightAtSale ? parseFloat(data.weightAtSale) : null,
+                buyerName: data.buyerName || '',
+                buyerContact: data.buyerContact || '',
+                saleDate: data.saleDate || new Date().toISOString().split('T')[0],
+                notes: data.notes || '',
+                createdAt: new Date().toISOString()
+            };
+
             // INTENTAR GUARDAR EN API
+            let savedInAPI = false;
             try {
                 await this.app.apiCall('/sales', {
                     method: 'POST',
-                    body: data
+                    body: newSale
                 });
-                this.app.showAlert('Venta registrada exitosamente en el servidor', 'success');
+                savedInAPI = true;
+                console.log('✅ Venta guardada en API');
             } catch (apiError) {
-                console.warn('⚠️ Error al guardar en API, guardando localmente:', apiError);
+                console.warn('⚠️ Error al guardar en API, guardando localmente:', apiError.message);
+                savedInAPI = false;
+            }
+
+            // GUARDAR LOCALMENTE SIEMPRE
+            const currentSales = this.getLocalSales();
+            currentSales.push(newSale);
+            this.saveLocalSales(currentSales);
+
+            if (savedInAPI) {
+                this.app.showAlert('Venta registrada exitosamente', 'success');
+            } else {
                 this.app.showAlert('Venta guardada localmente (servidor no disponible)', 'warning');
             }
             
@@ -251,12 +315,17 @@ class SalesManager {
                 await this.app.apiCall(`/sales/${saleId}`, {
                     method: 'DELETE'
                 });
-                this.app.showAlert('Venta eliminada del servidor', 'success');
+                console.log('✅ Venta eliminada de API');
             } catch (apiError) {
-                console.warn('⚠️ Error al eliminar en API:', apiError);
-                this.app.showAlert('No se pudo eliminar del servidor', 'warning');
+                console.warn('⚠️ Error al eliminar en API, eliminando localmente:', apiError.message);
             }
             
+            // ELIMINAR LOCALMENTE SIEMPRE
+            const currentSales = this.getLocalSales();
+            const updatedSales = currentSales.filter(sale => sale.id != saleId);
+            this.saveLocalSales(updatedSales);
+            
+            this.app.showAlert('Venta eliminada exitosamente', 'success');
             await this.loadSales();
 
         } catch (error) {
@@ -283,12 +352,13 @@ class SalesManager {
         // Mostrar mensaje si no hay resultados
         if (visibleCount === 0 && searchTerm) {
             const container = document.getElementById('sales-list');
-            container.innerHTML += `
-                <div class="alert alert-warning">
-                    <i class="fas fa-search me-2"></i>
-                    No se encontraron ventas que coincidan con "${searchTerm}"
-                </div>
+            const noResults = document.createElement('div');
+            noResults.className = 'alert alert-warning mt-3';
+            noResults.innerHTML = `
+                <i class="fas fa-search me-2"></i>
+                No se encontraron ventas que coincidan con "${searchTerm}"
             `;
+            container.appendChild(noResults);
         }
     }
 

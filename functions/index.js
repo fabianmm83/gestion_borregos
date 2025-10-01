@@ -401,23 +401,62 @@ app.delete('/animals/:id', authenticate, async (req, res) => {
 app.get('/sales', authenticate, async (req, res) => {
     try {
         const userId = req.user.uid;
-        const salesSnapshot = await db.collection('sales')
-            .where('userId', '==', userId)
-            .orderBy('saleDate', 'desc')
-            .get();
+        
+        // Intentar diferentes estrategias de consulta
+        let salesSnapshot;
+        
+        try {
+            // Estrategia 1: Buscar con filtro de usuario
+            salesSnapshot = await db.collection('sales')
+                .where('userId', '==', userId)
+                .orderBy('saleDate', 'desc')
+                .get();
+                
+            console.log(`✅ Estrategia 1: ${salesSnapshot.size} ventas encontradas`);
             
-        const sales = salesSnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data(),
-            // Convertir timestamps a formato legible
-            saleDate: doc.data().saleDate?.toDate?.() || doc.data().saleDate,
-            createdAt: doc.data().createdAt?.toDate?.() || null
-        }));
+        } catch (filterError) {
+            console.log('⚠️ Estrategia 1 falló, intentando sin filtro...');
+            
+            // Estrategia 2: Traer todas las ventas y filtrar después
+            const allSalesSnapshot = await db.collection('sales')
+                .orderBy('saleDate', 'desc')
+                .get();
+                
+            // Filtrar manualmente por userId si existe el campo
+            const userSales = allSalesSnapshot.docs.filter(doc => {
+                const data = doc.data();
+                return data.userId === userId || 
+                       data.user_id === userId || 
+                       !data.userId; // Si no hay userId, asumir que son del usuario
+            });
+            
+            salesSnapshot = {
+                docs: userSales,
+                size: userSales.length
+            };
+            
+            console.log(`✅ Estrategia 2: ${salesSnapshot.size} ventas encontradas`);
+        }
+
+        const sales = salesSnapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                ...data,
+                // Asegurar que los campos críticos existan
+                animalEarTag: data.animalEarTag || data.earTag || 'N/A',
+                animalName: data.animalName || data.name || 'Sin nombre',
+                salePrice: data.salePrice || data.price || 0,
+                saleDate: data.saleDate?.toDate?.() || data.saleDate || new Date().toISOString(),
+                createdAt: data.createdAt?.toDate?.() || data.createdAt || null
+            };
+        });
         
         res.json(sales);
+        
     } catch (error) {
         console.error('Error getting sales:', error);
-        res.status(500).json({ error: 'Error al obtener ventas' });
+        res.status(500).json({ error: 'Error al obtener ventas: ' + error.message });
     }
 });
 
