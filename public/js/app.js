@@ -1,5 +1,5 @@
 // Configuración global
-const API_BASE_URL = 'https://us-central1-gestionborregos.cloudfunctions.net/api';
+const API_BASE_URL = 'https://us-central1-gestionborregos.cloudfunctions.net';
 const FIREBASE_API_KEY = 'AIzaSyC7XrvX6AOAUP7dhd6yR4xIO0aqRwGe5nk';
 
 class App {
@@ -24,7 +24,7 @@ async checkAuthAndLoad() {
     const token = localStorage.getItem('authToken');
     if (token) {
         try {
-            const response = await this.apiCall('/auth/verify', {
+            const response = await this.apiCall('/api/auth/verify', {
                 method: 'POST',
                 body: { token }
             });
@@ -119,7 +119,7 @@ async handleRegister(form) {
 
         // 3. Crear perfil en nuestro backend (Firebase Functions)
         try {
-            const profileResponse = await this.apiCall('/auth/create-admin', {
+            const profileResponse = await this.apiCall('/api/auth/create-admin', {
                 method: 'POST',
                 body: { 
                     email, 
@@ -260,7 +260,7 @@ logout() {
     async loadDashboardData() {
         try {
             this.showLoading(true);
-            const data = await this.apiCall('/dashboard');
+            const data = await this.apiCall('/api/dashboard');
             this.updateDashboardUI(data);
         } catch (error) {
             console.error('Error loading dashboard:', error);
@@ -670,7 +670,7 @@ logout() {
 
     async getActiveAnimals() {
         try {
-            const animals = await this.apiCall('/animals');
+            const animals = await this.apiCall('/api/animals');
             return animals.filter(animal => 
                 animal.status === 'active' || !animal.status
             );
@@ -682,7 +682,7 @@ logout() {
 
     async getInventoryItems() {
         try {
-            return await this.apiCall('/inventory');
+            return await this.apiCall('/api/inventory');
         } catch (error) {
             console.error('Error getting inventory:', error);
             return [];

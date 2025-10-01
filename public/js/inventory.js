@@ -13,7 +13,7 @@ class InventoryManager {
     async loadInventory() {
         try {
             this.app.showLoading(true);
-            const inventory = await this.app.apiCall('/inventory');
+            const inventory = await this.app.apiCall('/api/inventory');
             this.renderInventory(inventory);
         } catch (error) {
             console.error('Error loading inventory:', error);
@@ -99,7 +99,7 @@ class InventoryManager {
             this.app.showLoading(true);
             const formData = this.app.getFormData(form);
             
-            await this.app.apiCall('/inventory', {
+            await this.app.apiCall('/api/inventory', {
                 method: 'POST',
                 body: JSON.stringify(formData)
             });
@@ -122,7 +122,7 @@ class InventoryManager {
             const formData = this.app.getFormData(form);
             const itemId = form.dataset.itemId;
             
-            await this.app.apiCall(`/inventory/${itemId}/stock`, {
+            await this.app.apiCall(`/api/inventory/${itemId}/stock`, {
                 method: 'PUT',
                 body: JSON.stringify(formData)
             });

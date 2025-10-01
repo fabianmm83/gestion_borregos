@@ -12,7 +12,7 @@ class SalesManager {
     async loadSales() {
         try {
             this.app.showLoading(true);
-            const sales = await this.app.apiCall('/sales');
+            const sales = await this.app.apiCall('/api/sales');
             this.renderSales(sales);
         } catch (error) {
             console.error('Error loading sales:', error);
@@ -90,7 +90,7 @@ class SalesManager {
             this.app.showLoading(true);
             const formData = this.app.getFormData(form);
             
-            await this.app.apiCall('/sales', {
+            await this.app.apiCall('/api/sales', {
                 method: 'POST',
                 body: JSON.stringify(formData)
             });

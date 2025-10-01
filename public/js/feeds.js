@@ -12,7 +12,7 @@ class FeedsManager {
     async loadFeeds() {
         try {
             this.app.showLoading(true);
-            const feeds = await this.app.apiCall('/feeds');
+            const feeds = await this.app.apiCall('/api/feeds');
             this.renderFeeds(feeds);
         } catch (error) {
             console.error('Error loading feeds:', error);
@@ -76,7 +76,7 @@ class FeedsManager {
             this.app.showLoading(true);
             const formData = this.app.getFormData(form);
             
-            await this.app.apiCall('/feeds', {
+            await this.app.apiCall('/api/feeds', {
                 method: 'POST',
                 body: JSON.stringify(formData)
             });

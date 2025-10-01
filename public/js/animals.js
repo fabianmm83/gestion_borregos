@@ -11,7 +11,7 @@ class AnimalsManager {
     async loadAnimals() {
         try {
             this.app.showLoading(true);
-            const animals = await this.app.apiCall('/animals');
+            const animals = await this.app.apiCall('/api/animals');
             this.renderAnimals(animals);
         } catch (error) {
             console.error('Error loading animals:', error);
@@ -74,14 +74,14 @@ class AnimalsManager {
             
             if (form.dataset.editId) {
                 // Editar animal existente
-                await this.app.apiCall(`/animals/${form.dataset.editId}`, {
+                await this.app.apiCall(`/api/animals/${form.dataset.editId}`, {
                     method: 'PUT',
                     body: JSON.stringify(formData)
                 });
                 this.app.showAlert('Animal actualizado exitosamente', 'success');
             } else {
                 // Crear nuevo animal
-                await this.app.apiCall('/animals', {
+                await this.app.apiCall('/api/animals', {
                     method: 'POST',
                     body: JSON.stringify(formData)
                 });
