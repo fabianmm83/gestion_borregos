@@ -144,7 +144,7 @@ class App {
         }
     }
 
-    // Método para login
+    // Método para login - CON OPCIÓN 1 IMPLEMENTADA
     async handleLogin(form) {
         try {
             this.showLoading(true);
@@ -181,6 +181,24 @@ class App {
                 email: authData.email,
                 name: authData.displayName || email
             };
+
+            // 🔥 OPCIÓN 1 IMPLEMENTADA: Crear/verificar perfil en Firestore automáticamente
+            try {
+                console.log('🔄 Verificando/Creando perfil en Firestore...');
+                const profileResponse = await this.apiCall('/auth/create-admin', {
+                    method: 'POST',
+                    body: { 
+                        email, 
+                        name: authData.displayName || email,
+                        uid: authData.localId
+                    }
+                });
+                console.log('✅ Perfil creado/verificado en Firestore:', profileResponse);
+            } catch (profileError) {
+                console.warn('⚠️ Error creando/verificando perfil:', profileError);
+                // Continuamos aunque falle la creación del perfil para no bloquear el login
+                this.showAlert('Login exitoso, pero hubo un problema con el perfil. Puede que algunas funciones no estén disponibles.', 'warning');
+            }
 
             this.showAlert('¡Bienvenido!', 'success');
             this.showApp();
@@ -263,6 +281,12 @@ class App {
             this.updateDashboardUI(data);
         } catch (error) {
             console.error('Error loading dashboard:', error);
+            // Mostrar un mensaje más específico para el error 404
+            if (error.message.includes('404') && error.message.includes('Usuario no encontrado')) {
+                this.showAlert('Error: Perfil de usuario incompleto. Por favor, contacta al administrador.', 'danger');
+            } else {
+                this.showAlert('Error al cargar el dashboard: ' + error.message, 'danger');
+            }
         } finally {
             this.showLoading(false);
         }
