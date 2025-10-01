@@ -1,138 +1,147 @@
 class SalesManager {
-    constructor() {
-        this.currentEditId = null;
+    constructor(app) {
+        this.app = app;
         this.init();
     }
 
     init() {
         console.log('💰 SalesManager inicializado');
         this.setupEventListeners();
-        document.addEventListener('salesViewLoaded', () => this.loadSales());
     }
 
     setupEventListeners() {
-        // Formulario de venta
         const saleForm = document.getElementById('sale-form');
         if (saleForm) {
             saleForm.addEventListener('submit', (e) => this.handleSaleSubmit(e));
         }
 
-        // Botones de acción
-        document.addEventListener('click', (e) => {
-            if (e.target.matches('.view-sale-btn')) {
-                this.viewSale(e.target.dataset.id);
-            }
-            if (e.target.matches('.delete-sale-btn')) {
-                this.deleteSale(e.target.dataset.id);
-            }
-        });
-
-        // Filtros
-        const filterForm = document.getElementById('filter-sales-form');
-        if (filterForm) {
-            filterForm.addEventListener('submit', (e) => this.filterSales(e));
+        // Filtro de búsqueda
+        const searchInput = document.getElementById('animal-search');
+        if (searchInput) {
+            searchInput.addEventListener('input', () => this.filterSales());
         }
-
-        // Botón limpiar filtros
-        const clearFiltersBtn = document.getElementById('clear-sales-filters');
-        if (clearFiltersBtn) {
-            clearFiltersBtn.addEventListener('click', () => this.clearFilters());
-        }
-
-        // Cargar animales cuando se muestre el modal
-        document.getElementById('addSaleModal')?.addEventListener('show.bs.modal', () => {
-            this.loadAnimalsSelect();
-        });
     }
 
     async loadSales() {
         try {
-            window.app.showLoading(true);
-            const sales = await window.app.apiCall('/sales');
+            this.app.showLoading(true);
+            // Simular datos para demo
+            const sales = [
+                {
+                    id: 1,
+                    animalEarTag: "A001",
+                    animalName: "Borrego 1",
+                    salePrice: 2500.00,
+                    weightAtSale: 48.5,
+                    buyerName: "Juan Pérez",
+                    buyerContact: "555-1234",
+                    saleDate: "2024-01-10",
+                    notes: "Venta directa en granja"
+                },
+                {
+                    id: 2,
+                    animalEarTag: "A002",
+                    animalName: "Borrego 2",
+                    salePrice: 2300.00,
+                    weightAtSale: 45.0,
+                    buyerName: "María García",
+                    buyerContact: "555-5678",
+                    saleDate: "2024-01-08",
+                    notes: ""
+                }
+            ];
             this.renderSales(sales);
             this.updateStats(sales);
         } catch (error) {
             console.error('Error loading sales:', error);
-            window.app.showAlert('Error al cargar las ventas', 'danger');
+            this.app.showAlert('Error al cargar las ventas', 'danger');
         } finally {
-            window.app.showLoading(false);
+            this.app.showLoading(false);
         }
     }
 
     renderSales(sales) {
-        const tbody = document.getElementById('sales-tbody');
-        if (!tbody) return;
+        const container = document.getElementById('sales-list');
+        if (!container) return;
 
         if (sales.length === 0) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="9" class="text-center py-4">
-                        <i class="fas fa-receipt fa-2x text-muted mb-2"></i>
-                        <p class="text-muted">No hay ventas registradas</p>
-                        <button class="btn btn-primary" onclick="window.app.showModal('addSaleModal')">
-                            <i class="fas fa-plus me-1"></i>Registrar Venta
-                        </button>
-                    </td>
-                </tr>
+            container.innerHTML = `
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    No hay ventas registradas.
+                </div>
             `;
             return;
         }
 
-        tbody.innerHTML = sales.map(sale => `
-            <tr>
-                <td>
-                    <div class="d-flex align-items-center">
-                        <i class="fas fa-sheep text-success me-2"></i>
-                        <div>
-                            <strong>${this.escapeHtml(sale.animalName)}</strong>
-                            <br>
-                            <small class="text-muted">Arete: ${this.escapeHtml(sale.animalEarTag)}</small>
+        container.innerHTML = sales.map(sale => `
+            <div class="card mb-3">
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <h5 class="card-title text-success">
+                                <i class="fas fa-dollar-sign me-2"></i>Venta #${sale.id}
+                            </h5>
+                            <p class="card-text mb-1">
+                                <strong>Animal:</strong> ${this.escapeHtml(sale.animalName)} (Arete: ${this.escapeHtml(sale.animalEarTag)})
+                            </p>
+                            <p class="card-text mb-1">
+                                <strong>Precio:</strong> <span class="text-success fw-bold">$${parseFloat(sale.salePrice).toLocaleString()}</span>
+                            </p>
+                            <p class="card-text mb-1">
+                                <strong>Peso al vender:</strong> ${sale.weightAtSale} kg
+                            </p>
+                            <p class="card-text mb-1">
+                                <strong>Comprador:</strong> ${this.escapeHtml(sale.buyerName || 'N/A')}
+                            </p>
+                            <p class="card-text mb-1">
+                                <strong>Contacto:</strong> ${this.escapeHtml(sale.buyerContact || 'N/A')}
+                            </p>
+                            <p class="card-text mb-1">
+                                <strong>Fecha:</strong> ${new Date(sale.saleDate).toLocaleDateString()}
+                            </p>
+                            ${sale.notes ? `
+                                <p class="card-text">
+                                    <strong>Notas:</strong> ${sale.notes}
+                                </p>
+                            ` : ''}
+                        </div>
+                        <div class="col-md-4 text-end">
+                            <span class="badge bg-success">Completada</span>
+                            <div class="mt-2">
+                                <button class="btn btn-sm btn-outline-danger delete-sale-btn" data-id="${sale.id}">
+                                    <i class="fas fa-trash"></i> Eliminar
+                                </button>
+                            </div>
                         </div>
                     </div>
-                </td>
-                <td>${window.app.formatCurrency(sale.salePrice)}</td>
-                <td>${sale.weightAtSale ? `${sale.weightAtSale} kg` : 'N/A'}</td>
-                <td>${this.escapeHtml(sale.buyerName || 'N/A')}</td>
-                <td>${this.escapeHtml(sale.buyerContact || 'N/A')}</td>
-                <td>${window.app.formatDate(sale.saleDate)}</td>
-                <td>${this.escapeHtml(sale.notes || 'Sin notas')}</td>
-                <td>${window.app.formatDateTime(sale.createdAt)}</td>
-                <td>
-                    <div class="btn-group btn-group-sm">
-                        <button class="btn btn-outline-info view-sale-btn" data-id="${sale.id}">
-                            <i class="fas fa-eye"></i>
-                        </button>
-                        <button class="btn btn-outline-danger delete-sale-btn" data-id="${sale.id}">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </div>
-                </td>
-            </tr>
+                </div>
+            </div>
         `).join('');
+
+        // Agregar event listeners a los botones
+        this.attachSalesEventListeners();
+    }
+
+    attachSalesEventListeners() {
+        document.querySelectorAll('.delete-sale-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                this.deleteSale(e.target.closest('button').dataset.id);
+            });
+        });
     }
 
     updateStats(sales) {
-        const totalSalesElement = document.getElementById('total-sales');
-        const totalRevenueElement = document.getElementById('total-revenue');
-        const monthlySalesElement = document.getElementById('monthly-sales');
+        const totalTransactions = document.getElementById('total-transactions');
+        const totalIncome = document.getElementById('total-income');
 
-        if (totalSalesElement) {
-            totalSalesElement.textContent = sales.length;
+        if (totalTransactions) {
+            totalTransactions.textContent = sales.length;
         }
 
-        if (totalRevenueElement) {
-            const totalRevenue = sales.reduce((sum, sale) => sum + parseFloat(sale.salePrice), 0);
-            totalRevenueElement.textContent = window.app.formatCurrency(totalRevenue);
-        }
-
-        if (monthlySalesElement) {
-            const currentMonth = new Date().getMonth();
-            const currentYear = new Date().getFullYear();
-            const monthlySales = sales.filter(sale => {
-                const saleDate = new Date(sale.saleDate);
-                return saleDate.getMonth() === currentMonth && saleDate.getFullYear() === currentYear;
-            }).length;
-            monthlySalesElement.textContent = monthlySales;
+        if (totalIncome) {
+            const total = sales.reduce((sum, sale) => sum + parseFloat(sale.salePrice), 0);
+            totalIncome.textContent = `$${total.toLocaleString()}`;
         }
     }
 
@@ -141,82 +150,37 @@ class SalesManager {
         const form = e.target;
         
         try {
-            window.app.showLoading(true);
-            const formData = window.app.getFormData(form);
+            this.app.showLoading(true);
+            const formData = new FormData(form);
+            const data = Object.fromEntries(formData);
 
             // Validaciones
-            if (!formData.animalId && !formData.animalEarTag) {
-                window.app.showAlert('Debe seleccionar un animal o ingresar el número de arete', 'warning');
+            if (!data.animalEarTag || !data.salePrice) {
+                this.app.showAlert('Número de arete y precio de venta son obligatorios', 'warning');
                 return;
             }
 
-            if (!formData.salePrice) {
-                window.app.showAlert('El precio de venta es obligatorio', 'warning');
+            if (parseFloat(data.salePrice) <= 0) {
+                this.app.showAlert('El precio de venta debe ser mayor a 0', 'warning');
                 return;
             }
 
-            // Registrar venta
-            await window.app.apiCall('/sales', {
-                method: 'POST',
-                body: formData
-            });
-
-            window.app.showAlert('Venta registrada exitosamente', 'success');
-
-            // Cerrar modal y recargar datos
-            window.app.hideModal('addSaleModal');
-            window.app.resetForm(form);
+            // Simular guardado
+            console.log('Registrando venta:', data);
+            
+            this.app.showAlert('Venta registrada exitosamente', 'success');
+            
+            // Cerrar modal y recargar
+            const modal = bootstrap.Modal.getInstance(document.getElementById('sale-form-modal'));
+            modal.hide();
+            form.reset();
             await this.loadSales();
 
         } catch (error) {
             console.error('Error saving sale:', error);
-            window.app.showAlert('Error al registrar la venta: ' + error.message, 'danger');
+            this.app.showAlert('Error al registrar la venta', 'danger');
         } finally {
-            window.app.showLoading(false);
-        }
-    }
-
-    async viewSale(saleId) {
-        try {
-            window.app.showLoading(true);
-            const sale = await window.app.apiCall(`/sales/${saleId}`);
-            
-            // Mostrar detalles en un modal
-            const modalBody = `
-                <div class="row">
-                    <div class="col-md-6">
-                        <h6>Animal</h6>
-                        <p><strong>Nombre:</strong> ${this.escapeHtml(sale.animalName)}</p>
-                        <p><strong>Arete:</strong> ${this.escapeHtml(sale.animalEarTag)}</p>
-                    </div>
-                    <div class="col-md-6">
-                        <h6>Venta</h6>
-                        <p><strong>Precio:</strong> ${window.app.formatCurrency(sale.salePrice)}</p>
-                        <p><strong>Peso:</strong> ${sale.weightAtSale ? `${sale.weightAtSale} kg` : 'N/A'}</p>
-                        <p><strong>Fecha:</strong> ${window.app.formatDate(sale.saleDate)}</p>
-                    </div>
-                </div>
-                <div class="row mt-3">
-                    <div class="col-md-6">
-                        <h6>Comprador</h6>
-                        <p><strong>Nombre:</strong> ${this.escapeHtml(sale.buyerName || 'N/A')}</p>
-                        <p><strong>Contacto:</strong> ${this.escapeHtml(sale.buyerContact || 'N/A')}</p>
-                    </div>
-                    <div class="col-md-6">
-                        <h6>Notas</h6>
-                        <p>${this.escapeHtml(sale.notes || 'Sin notas')}</p>
-                    </div>
-                </div>
-            `;
-
-            // Crear modal temporal para mostrar detalles
-            this.showDetailModal('Detalles de Venta', modalBody);
-
-        } catch (error) {
-            console.error('Error loading sale details:', error);
-            window.app.showAlert('Error al cargar los detalles de la venta', 'danger');
-        } finally {
-            window.app.showLoading(false);
+            this.app.showLoading(false);
         }
     }
 
@@ -226,96 +190,50 @@ class SalesManager {
         }
 
         try {
-            window.app.showLoading(true);
-            await window.app.apiCall(`/sales/${saleId}`, {
-                method: 'DELETE'
-            });
+            this.app.showLoading(true);
+            // Simular eliminación
+            console.log('Eliminando venta:', saleId);
             
-            window.app.showAlert('Venta eliminada exitosamente', 'success');
+            this.app.showAlert('Venta eliminada exitosamente', 'success');
             await this.loadSales();
 
         } catch (error) {
             console.error('Error deleting sale:', error);
-            window.app.showAlert('Error al eliminar la venta', 'danger');
+            this.app.showAlert('Error al eliminar la venta', 'danger');
         } finally {
-            window.app.showLoading(false);
+            this.app.showLoading(false);
         }
     }
 
-    showDetailModal(title, content) {
-        // Crear modal temporal
-        const modalId = 'detailModal';
-        let modalElement = document.getElementById(modalId);
+    filterSales() {
+        const searchTerm = document.getElementById('animal-search').value.toLowerCase();
         
-        if (!modalElement) {
-            modalElement = document.createElement('div');
-            modalElement.id = modalId;
-            modalElement.className = 'modal fade';
-            modalElement.innerHTML = `
-                <div class="modal-dialog modal-lg">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title"></h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                        </div>
-                        <div class="modal-body"></div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
-                        </div>
-                    </div>
-                </div>
-            `;
-            document.body.appendChild(modalElement);
-        }
+        const cards = document.querySelectorAll('#sales-list .card');
+        cards.forEach(card => {
+            const text = card.textContent.toLowerCase();
+            const matchesSearch = text.includes(searchTerm);
+            card.style.display = matchesSearch ? 'block' : 'none';
+        });
+    }
 
-        modalElement.querySelector('.modal-title').textContent = title;
-        modalElement.querySelector('.modal-body').innerHTML = content;
+    showSaleForm() {
+        const form = document.getElementById('sale-form');
+        form.reset();
         
-        const modal = new bootstrap.Modal(modalElement);
+        // Establecer fecha actual por defecto
+        const today = new Date().toISOString().split('T')[0];
+        const dateInput = form.querySelector('#sale-saleDate');
+        if (dateInput && !dateInput.value) {
+            dateInput.value = today;
+        }
+        
+        const modal = new bootstrap.Modal(document.getElementById('sale-form-modal'));
         modal.show();
-    }
-
-    async loadAnimalsSelect() {
-        try {
-            const animals = await window.app.getActiveAnimals();
-            const select = document.getElementById('sale-animal-id');
-            if (select) {
-                // Limpiar opciones excepto la primera
-                while (select.options.length > 1) {
-                    select.remove(1);
-                }
-                
-                // Agregar animales activos
-                animals.forEach(animal => {
-                    const option = document.createElement('option');
-                    option.value = animal.id;
-                    option.textContent = `${animal.earTag} - ${animal.name} (${animal.breed})`;
-                    select.appendChild(option);
-                });
-            }
-        } catch (error) {
-            console.error('Error loading animals for select:', error);
-        }
-    }
-
-    async filterSales(e) {
-        e.preventDefault();
-        // Implementar filtros si es necesario
-        window.app.showAlert('Filtro aplicado', 'info');
-    }
-
-    clearFilters() {
-        const filterForm = document.getElementById('filter-sales-form');
-        if (filterForm) {
-            filterForm.reset();
-        }
-        this.loadSales();
     }
 
     escapeHtml(unsafe) {
         if (!unsafe) return '';
-        return unsafe
-            .toString()
+        return unsafe.toString()
             .replace(/&/g, "&amp;")
             .replace(/</g, "&lt;")
             .replace(/>/g, "&gt;")
@@ -325,6 +243,8 @@ class SalesManager {
 }
 
 // Inicialización
-if (typeof window.salesManager === 'undefined') {
-    window.salesManager = new SalesManager();
-}
+document.addEventListener('DOMContentLoaded', () => {
+    if (window.app) {
+        window.salesManager = new SalesManager(window.app);
+    }
+});

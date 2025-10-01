@@ -1,143 +1,205 @@
 class InventoryManager {
-    constructor() {
+    constructor(app) {
+        this.app = app;
         this.currentEditId = null;
+        this.currentStockUpdateId = null;
         this.init();
     }
 
     init() {
         console.log('📦 InventoryManager inicializado');
         this.setupEventListeners();
-        document.addEventListener('inventoryViewLoaded', () => this.loadInventory());
     }
 
     setupEventListeners() {
-        // Formulario de inventario
         const inventoryForm = document.getElementById('inventory-form');
         if (inventoryForm) {
             inventoryForm.addEventListener('submit', (e) => this.handleInventorySubmit(e));
         }
 
-        // Formulario de ajuste de stock
-        const stockForm = document.getElementById('stock-form');
-        if (stockForm) {
-            stockForm.addEventListener('submit', (e) => this.handleStockAdjustment(e));
+        const stockUpdateForm = document.getElementById('stock-update-form');
+        if (stockUpdateForm) {
+            stockUpdateForm.addEventListener('submit', (e) => this.handleStockUpdate(e));
         }
 
-        // Botones de acción
-        document.addEventListener('click', (e) => {
-            if (e.target.matches('.edit-inventory-btn')) {
-                this.editInventory(e.target.dataset.id);
-            }
-            if (e.target.matches('.delete-inventory-btn')) {
-                this.deleteInventory(e.target.dataset.id);
-            }
-            if (e.target.matches('.adjust-stock-btn')) {
-                this.showStockAdjustment(e.target.dataset.id);
-            }
-        });
-
         // Filtros
-        const filterForm = document.getElementById('filter-inventory-form');
-        if (filterForm) {
-            filterForm.addEventListener('submit', (e) => this.filterInventory(e));
+        const typeFilter = document.getElementById('inventory-type-filter');
+        if (typeFilter) {
+            typeFilter.addEventListener('change', () => this.filterInventory());
         }
     }
 
     async loadInventory() {
         try {
-            window.app.showLoading(true);
-            const inventory = await window.app.apiCall('/inventory');
+            this.app.showLoading(true);
+            // Simular datos para demo
+            const inventory = [
+                {
+                    id: 1,
+                    item_type: "medicine",
+                    itemName: "Antibiótico Ovinos",
+                    currentStock: 5,
+                    minStock: 10,
+                    unit: "unidades",
+                    price: 150.00,
+                    supplier: "Farmacia Veterinaria SA",
+                    purchase_date: "2024-01-01",
+                    expiration_date: "2024-12-31",
+                    notes: "Antibiótico de amplio espectro"
+                },
+                {
+                    id: 2,
+                    item_type: "supplies",
+                    itemName: "Alimento Concentrado",
+                    currentStock: 500,
+                    minStock: 100,
+                    unit: "kg",
+                    price: 25.50,
+                    supplier: "Alimentos Premium",
+                    purchase_date: "2024-01-05",
+                    expiration_date: "2024-06-30",
+                    notes: "Alimento para crecimiento"
+                },
+                {
+                    id: 3,
+                    item_type: "tools",
+                    itemName: "Tijeras de Esquila",
+                    currentStock: 2,
+                    minStock: 1,
+                    unit: "unidades",
+                    price: 450.00,
+                    supplier: "Herramientas Agro",
+                    purchase_date: "2023-12-15",
+                    notes: "Tijeras profesionales para esquila"
+                }
+            ];
             this.renderInventory(inventory);
             this.updateStats(inventory);
         } catch (error) {
             console.error('Error loading inventory:', error);
-            window.app.showAlert('Error al cargar el inventario', 'danger');
+            this.app.showAlert('Error al cargar el inventario', 'danger');
         } finally {
-            window.app.showLoading(false);
+            this.app.showLoading(false);
         }
     }
 
     renderInventory(inventory) {
-        const tbody = document.getElementById('inventory-tbody');
-        if (!tbody) return;
+        const container = document.getElementById('inventory-list');
+        if (!container) return;
 
         if (inventory.length === 0) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="9" class="text-center py-4">
-                        <i class="fas fa-boxes fa-2x text-muted mb-2"></i>
-                        <p class="text-muted">No hay items en el inventario</p>
-                        <button class="btn btn-primary" onclick="window.app.showModal('addInventoryModal')">
-                            <i class="fas fa-plus me-1"></i>Agregar Item
-                        </button>
-                    </td>
-                </tr>
+            container.innerHTML = `
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    No hay items en el inventario.
+                </div>
             `;
             return;
         }
 
-        tbody.innerHTML = inventory.map(item => {
+        container.innerHTML = inventory.map(item => {
             const isLowStock = item.currentStock <= item.minStock;
-            const stockStatus = isLowStock ? 'bg-danger' : 'bg-success';
+            const stockClass = isLowStock ? 'bg-danger' : 'bg-success';
             const stockText = isLowStock ? 'Stock Bajo' : 'Stock OK';
+            const itemTypeText = this.getItemTypeText(item.item_type);
 
             return `
-                <tr class="${isLowStock ? 'table-warning' : ''}">
-                    <td>
-                        <div class="d-flex align-items-center">
-                            <i class="fas fa-box text-primary me-2"></i>
-                            <div>
-                                <strong>${this.escapeHtml(item.itemName)}</strong>
-                                <br>
-                                <small class="text-muted">${this.escapeHtml(item.category)}</small>
+                <div class="card mb-3 ${isLowStock ? 'border-warning' : ''}">
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-8">
+                                <h5 class="card-title">
+                                    <i class="${this.getItemTypeIcon(item.item_type)} me-2"></i>
+                                    ${this.escapeHtml(item.itemName)}
+                                </h5>
+                                <p class="card-text mb-1">
+                                    <strong>Tipo:</strong> 
+                                    <span class="badge bg-secondary">${itemTypeText}</span>
+                                </p>
+                                <p class="card-text mb-1">
+                                    <strong>Stock:</strong> 
+                                    <span class="badge ${stockClass}">${item.currentStock} ${item.unit}</span>
+                                    ${isLowStock ? '<i class="fas fa-exclamation-triangle text-warning ms-1"></i>' : ''}
+                                </p>
+                                <p class="card-text mb-1">
+                                    <strong>Stock Mínimo:</strong> ${item.minStock} ${item.unit}
+                                </p>
+                                <p class="card-text mb-1">
+                                    <strong>Precio:</strong> $${parseFloat(item.price).toLocaleString()}
+                                </p>
+                                <p class="card-text mb-1">
+                                    <strong>Proveedor:</strong> ${this.escapeHtml(item.supplier || 'N/A')}
+                                </p>
+                                ${item.expiration_date ? `
+                                    <p class="card-text mb-1">
+                                        <strong>Caducidad:</strong> ${new Date(item.expiration_date).toLocaleDateString()}
+                                    </p>
+                                ` : ''}
+                                ${item.notes ? `
+                                    <p class="card-text">
+                                        <strong>Descripción:</strong> ${item.notes}
+                                    </p>
+                                ` : ''}
+                            </div>
+                            <div class="col-md-4 text-end">
+                                <div class="mb-2">
+                                    <span class="badge ${stockClass}">${stockText}</span>
+                                </div>
+                                <div class="btn-group-vertical">
+                                    <button class="btn btn-sm btn-outline-success adjust-stock-btn" data-id="${item.id}">
+                                        <i class="fas fa-edit"></i> Ajustar Stock
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-primary edit-inventory-btn" data-id="${item.id}">
+                                        <i class="fas fa-edit"></i> Editar
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger delete-inventory-btn" data-id="${item.id}">
+                                        <i class="fas fa-trash"></i> Eliminar
+                                    </button>
+                                </div>
                             </div>
                         </div>
-                    </td>
-                    <td>
-                        <span class="badge ${stockStatus}">${item.currentStock} ${item.unit}</span>
-                    </td>
-                    <td>${item.minStock} ${item.unit}</td>
-                    <td>${window.app.formatCurrency(item.price)}</td>
-                    <td>${this.escapeHtml(item.supplier || 'N/A')}</td>
-                    <td>${this.escapeHtml(item.notes || 'Sin notas')}</td>
-                    <td>${window.app.formatDate(item.lastUpdated)}</td>
-                    <td>
-                        <div class="btn-group btn-group-sm">
-                            <button class="btn btn-outline-success adjust-stock-btn" data-id="${item.id}">
-                                <i class="fas fa-edit"></i> Stock
-                            </button>
-                            <button class="btn btn-outline-primary edit-inventory-btn" data-id="${item.id}">
-                                <i class="fas fa-edit"></i>
-                            </button>
-                            <button class="btn btn-outline-danger delete-inventory-btn" data-id="${item.id}">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </div>
-                    </td>
-                </tr>
+                    </div>
+                </div>
             `;
         }).join('');
+
+        // Agregar event listeners
+        this.attachInventoryEventListeners();
+    }
+
+    attachInventoryEventListeners() {
+        document.querySelectorAll('.edit-inventory-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                this.editInventory(e.target.closest('button').dataset.id);
+            });
+        });
+
+        document.querySelectorAll('.delete-inventory-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                this.deleteInventory(e.target.closest('button').dataset.id);
+            });
+        });
+
+        document.querySelectorAll('.adjust-stock-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                this.showStockUpdate(e.target.closest('button').dataset.id);
+            });
+        });
     }
 
     updateStats(inventory) {
-        const totalItemsElement = document.getElementById('total-inventory-items');
-        const lowStockItemsElement = document.getElementById('low-stock-items');
-        const totalValueElement = document.getElementById('total-inventory-value');
+        const totalInventory = document.getElementById('total-inventory');
+        const lowStockItems = document.getElementById('low-stock-items');
+        const inventoryLowStock = document.getElementById('inventory-low-stock');
 
-        if (totalItemsElement) {
-            totalItemsElement.textContent = inventory.length;
+        if (totalInventory) {
+            totalInventory.textContent = inventory.length;
         }
 
-        if (lowStockItemsElement) {
+        if (lowStockItems || inventoryLowStock) {
             const lowStockCount = inventory.filter(item => item.currentStock <= item.minStock).length;
-            lowStockItemsElement.textContent = lowStockCount;
-        }
-
-        if (totalValueElement) {
-            const totalValue = inventory.reduce((sum, item) => {
-                return sum + (item.currentStock * item.price);
-            }, 0);
-            totalValueElement.textContent = window.app.formatCurrency(totalValue);
+            if (lowStockItems) lowStockItems.textContent = lowStockCount;
+            if (inventoryLowStock) inventoryLowStock.textContent = lowStockCount;
         }
     }
 
@@ -146,69 +208,74 @@ class InventoryManager {
         const form = e.target;
         
         try {
-            window.app.showLoading(true);
-            const formData = window.app.getFormData(form);
+            this.app.showLoading(true);
+            const formData = new FormData(form);
+            const data = Object.fromEntries(formData);
 
             // Validaciones
-            if (!formData.itemName || !formData.category) {
-                window.app.showAlert('Nombre y categoría del item son obligatorios', 'warning');
+            if (!data.item_type || !data.itemName || !data.currentStock || !data.minStock) {
+                this.app.showAlert('Todos los campos obligatorios deben ser completados', 'warning');
                 return;
             }
 
-            if (this.currentEditId) {
-                // Editar item existente
-                await window.app.apiCall(`/inventory/${this.currentEditId}`, {
-                    method: 'PUT',
-                    body: formData
-                });
-                window.app.showAlert('Item actualizado exitosamente', 'success');
-            } else {
-                // Crear nuevo item
-                await window.app.apiCall('/inventory', {
-                    method: 'POST',
-                    body: formData
-                });
-                window.app.showAlert('Item agregado al inventario exitosamente', 'success');
+            if (parseInt(data.currentStock) < 0 || parseInt(data.minStock) < 0) {
+                this.app.showAlert('Los valores de stock no pueden ser negativos', 'warning');
+                return;
             }
 
-            // Cerrar modal y recargar datos
-            window.app.hideModal('addInventoryModal');
-            this.currentEditId = null;
-            window.app.resetForm(form);
+            // Simular guardado
+            console.log('Guardando item de inventario:', data);
+            
+            this.app.showAlert('Item guardado en inventario exitosamente', 'success');
+            
+            const modal = bootstrap.Modal.getInstance(document.getElementById('inventory-form-modal'));
+            modal.hide();
+            form.reset();
             await this.loadInventory();
 
         } catch (error) {
             console.error('Error saving inventory item:', error);
-            window.app.showAlert('Error al guardar el item: ' + error.message, 'danger');
+            this.app.showAlert('Error al guardar el item', 'danger');
         } finally {
-            window.app.showLoading(false);
+            this.app.showLoading(false);
         }
     }
 
     async editInventory(itemId) {
         try {
-            window.app.showLoading(true);
-            const item = await window.app.apiCall(`/inventory/${itemId}`);
+            this.app.showLoading(true);
+            // Simular carga de item - reemplazar con API real
+            const item = {
+                id: itemId,
+                item_type: "medicine",
+                itemName: "Antibiótico Ovinos",
+                currentStock: 5,
+                minStock: 10,
+                unit: "unidades",
+                price: 150.00,
+                supplier: "Farmacia Veterinaria SA",
+                purchase_date: "2024-01-01",
+                expiration_date: "2024-12-31",
+                notes: "Antibiótico de amplio espectro"
+            };
             
             // Poblar formulario
             const form = document.getElementById('inventory-form');
-            window.app.populateForm(form, item);
+            Object.keys(item).forEach(key => {
+                const input = form.querySelector(`[name="${key}"]`);
+                if (input) input.value = item[key] || '';
+            });
             
-            // Configurar para edición
             this.currentEditId = itemId;
-            const modalTitle = document.querySelector('#addInventoryModal .modal-title');
-            if (modalTitle) {
-                modalTitle.textContent = 'Editar Item de Inventario';
-            }
             
-            // Mostrar modal
-            window.app.showModal('addInventoryModal');
+            const modal = new bootstrap.Modal(document.getElementById('inventory-form-modal'));
+            modal.show();
 
         } catch (error) {
             console.error('Error loading inventory item for edit:', error);
-            window.app.showAlert('Error al cargar el item para editar', 'danger');
+            this.app.showAlert('Error al cargar el item', 'danger');
         } finally {
-            window.app.showLoading(false);
+            this.app.showLoading(false);
         }
     }
 
@@ -218,90 +285,151 @@ class InventoryManager {
         }
 
         try {
-            window.app.showLoading(true);
-            await window.app.apiCall(`/inventory/${itemId}`, {
-                method: 'DELETE'
-            });
+            this.app.showLoading(true);
+            // Simular eliminación
+            console.log('Eliminando item:', itemId);
             
-            window.app.showAlert('Item eliminado del inventario exitosamente', 'success');
+            this.app.showAlert('Item eliminado del inventario exitosamente', 'success');
             await this.loadInventory();
 
         } catch (error) {
             console.error('Error deleting inventory item:', error);
-            window.app.showAlert('Error al eliminar el item del inventario', 'danger');
+            this.app.showAlert('Error al eliminar el item', 'danger');
         } finally {
-            window.app.showLoading(false);
+            this.app.showLoading(false);
         }
     }
 
-    async showStockAdjustment(itemId) {
+    async showStockUpdate(itemId) {
         try {
-            window.app.showLoading(true);
-            const item = await window.app.apiCall(`/inventory/${itemId}`);
+            this.app.showLoading(true);
+            // Simular carga de item
+            const item = {
+                id: itemId,
+                itemName: "Antibiótico Ovinos",
+                currentStock: 5,
+                unit: "unidades"
+            };
             
-            // Configurar modal de ajuste de stock
-            document.getElementById('adjust-stock-item-name').textContent = item.itemName;
-            document.getElementById('adjust-stock-current').textContent = `${item.currentStock} ${item.unit}`;
-            document.getElementById('stock-item-id').value = itemId;
+            // Configurar modal
+            document.getElementById('update-current-stock').value = item.currentStock;
+            this.currentStockUpdateId = itemId;
             
-            // Mostrar modal
-            window.app.showModal('adjustStockModal');
+            const modal = new bootstrap.Modal(document.getElementById('stock-update-modal'));
+            modal.show();
 
         } catch (error) {
-            console.error('Error loading item for stock adjustment:', error);
-            window.app.showAlert('Error al cargar el item para ajuste de stock', 'danger');
+            console.error('Error loading item for stock update:', error);
+            this.app.showAlert('Error al cargar el item', 'danger');
         } finally {
-            window.app.showLoading(false);
+            this.app.showLoading(false);
         }
     }
 
-    async handleStockAdjustment(e) {
+    async handleStockUpdate(e) {
         e.preventDefault();
         const form = e.target;
         
         try {
-            window.app.showLoading(true);
-            const formData = window.app.getFormData(form);
-            const itemId = formData.itemId;
-            const operation = formData.operation;
-            const quantity = parseFloat(formData.quantity);
+            this.app.showLoading(true);
+            const formData = new FormData(form);
+            const data = Object.fromEntries(formData);
 
-            if (!quantity || quantity <= 0) {
-                window.app.showAlert('La cantidad debe ser mayor a 0', 'warning');
-                return;
+            const currentStock = parseInt(document.getElementById('update-current-stock').value);
+            const quantity = parseInt(data.quantity);
+            let newStock = currentStock;
+
+            switch (data.operation) {
+                case 'add':
+                    newStock = currentStock + quantity;
+                    break;
+                case 'subtract':
+                    newStock = currentStock - quantity;
+                    if (newStock < 0) {
+                        this.app.showAlert('No se puede tener stock negativo', 'warning');
+                        return;
+                    }
+                    break;
+                case 'set':
+                    newStock = quantity;
+                    break;
             }
 
-            await window.app.apiCall(`/inventory/${itemId}/stock`, {
-                method: 'PUT',
-                body: {
-                    operation: operation,
-                    quantity: quantity
-                }
-            });
-
-            window.app.showAlert('Stock actualizado exitosamente', 'success');
-            window.app.hideModal('adjustStockModal');
-            window.app.resetForm(form);
+            // Simular actualización
+            console.log(`Actualizando stock del item ${this.currentStockUpdateId}: ${currentStock} -> ${newStock}`);
+            
+            this.app.showAlert('Stock actualizado exitosamente', 'success');
+            
+            const modal = bootstrap.Modal.getInstance(document.getElementById('stock-update-modal'));
+            modal.hide();
+            form.reset();
             await this.loadInventory();
 
         } catch (error) {
-            console.error('Error adjusting stock:', error);
-            window.app.showAlert('Error al ajustar el stock: ' + error.message, 'danger');
+            console.error('Error updating stock:', error);
+            this.app.showAlert('Error al actualizar el stock', 'danger');
         } finally {
-            window.app.showLoading(false);
+            this.app.showLoading(false);
         }
     }
 
-    async filterInventory(e) {
-        e.preventDefault();
-        // Implementar filtros si es necesario
-        window.app.showAlert('Filtro aplicado', 'info');
+    filterInventory() {
+        const typeFilter = document.getElementById('inventory-type-filter').value;
+        
+        const cards = document.querySelectorAll('#inventory-list .card');
+        cards.forEach(card => {
+            const itemType = card.querySelector('.badge.bg-secondary').textContent.toLowerCase();
+            const matchesType = !typeFilter || 
+                this.getItemTypeKey(itemType).includes(typeFilter);
+            
+            card.style.display = matchesType ? 'block' : 'none';
+        });
+    }
+
+    showInventoryForm() {
+        this.currentEditId = null;
+        const form = document.getElementById('inventory-form');
+        form.reset();
+        const modal = new bootstrap.Modal(document.getElementById('inventory-form-modal'));
+        modal.show();
+    }
+
+    getItemTypeIcon(type) {
+        const icons = {
+            'medicine': 'fas fa-pills',
+            'equipment': 'fas fa-tools',
+            'supplies': 'fas fa-box-open',
+            'tools': 'fas fa-wrench',
+            'other': 'fas fa-cube'
+        };
+        return icons[type] || 'fas fa-cube';
+    }
+
+    getItemTypeText(type) {
+        const texts = {
+            'medicine': 'Medicina',
+            'equipment': 'Equipo',
+            'supplies': 'Insumos',
+            'tools': 'Herramientas',
+            'other': 'Otro'
+        };
+        return texts[type] || type;
+    }
+
+    getItemTypeKey(text) {
+        const keys = {
+            'medicina': 'medicine',
+            'equipo': 'equipment',
+            'insumos': 'supplies',
+            'herramientas': 'tools',
+            'otro': 'other'
+        };
+        return keys[text.toLowerCase()] || text;
     }
 
     escapeHtml(unsafe) {
         if (!unsafe) return '';
-        return unsafe
-            .toString()
+        return unsafe.toString()
             .replace(/&/g, "&amp;")
             .replace(/</g, "&lt;")
             .replace(/>/g, "&gt;")
@@ -311,6 +439,8 @@ class InventoryManager {
 }
 
 // Inicialización
-if (typeof window.inventoryManager === 'undefined') {
-    window.inventoryManager = new InventoryManager();
-}
+document.addEventListener('DOMContentLoaded', () => {
+    if (window.app) {
+        window.inventoryManager = new InventoryManager(window.app);
+    }
+});
