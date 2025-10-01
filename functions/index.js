@@ -15,11 +15,21 @@ db.settings({
 
 const app = express();
 
-// Configurar CORS
+// Configurar CORS - MEJORADO
 app.use(cors({ origin: true }));
+app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    if (req.method === 'OPTIONS') {
+        return res.status(200).end();
+    }
+    next();
+});
 
 // Middleware para parsear JSON
 app.use(express.json());
+
 app.get('/', (req, res) => {
     res.json({ 
         status: 'API funcionando', 
@@ -69,7 +79,7 @@ app.get('/api/health', (req, res) => {
 
 // ==================== ENDPOINTS DE AUTENTICACIÓN ====================
 
-/// Crear usuario administrador
+// Crear usuario administrador
 app.post('/api/auth/create-admin', async (req, res) => {
     try {
         console.log('=== CREATE ADMIN REQUEST ===');
@@ -137,7 +147,6 @@ app.post('/api/auth/create-admin', async (req, res) => {
     }
 });
 
-
 // Verificar token
 app.post('/api/auth/verify', async (req, res) => {
     try {
@@ -148,16 +157,23 @@ app.post('/api/auth/verify', async (req, res) => {
         }
 
         const decodedToken = await admin.auth().verifyIdToken(token);
+        
+        // Obtener información adicional del usuario desde Firestore
+        const userDoc = await db.collection('users').doc(decodedToken.uid).get();
+        const userData = userDoc.exists ? userDoc.data() : {};
+
         res.json({
             valid: true,
             user: {
                 uid: decodedToken.uid,
                 email: decodedToken.email,
-                name: decodedToken.name || decodedToken.email
+                name: decodedToken.name || userData.name || decodedToken.email,
+                role: userData.role || 'user'
             }
         });
     } catch (error) {
-        res.json({ valid: false, error: 'Token inválido' });
+        console.error('Token verification error:', error);
+        res.status(401).json({ valid: false, error: 'Token inválido' });
     }
 });
 
@@ -167,6 +183,12 @@ app.post('/api/auth/verify', async (req, res) => {
 app.get('/api/dashboard', authenticate, async (req, res) => {
     try {
         const userId = req.user.uid;
+        
+        // Verificar que el usuario existe en Firestore
+        const userDoc = await db.collection('users').doc(userId).get();
+        if (!userDoc.exists) {
+            return res.status(404).json({ error: 'Usuario no encontrado' });
+        }
         
         // Obtener conteo de animales del usuario
         const animalsSnapshot = await db.collection('animals')
@@ -213,7 +235,10 @@ app.get('/api/animals', authenticate, async (req, res) => {
             
         const animals = animalsSnapshot.docs.map(doc => ({
             id: doc.id,
-            ...doc.data()
+            ...doc.data(),
+            // Convertir timestamps a formato legible
+            createdAt: doc.data().createdAt?.toDate?.() || null,
+            updatedAt: doc.data().updatedAt?.toDate?.() || null
         }));
         
         res.json(animals);
@@ -241,7 +266,10 @@ app.get('/api/animals/:id', authenticate, async (req, res) => {
         
         res.json({
             id: animalDoc.id,
-            ...animalData
+            ...animalData,
+            // Convertir timestamps a formato legible
+            createdAt: animalData.createdAt?.toDate?.() || null,
+            updatedAt: animalData.updatedAt?.toDate?.() || null
         });
     } catch (error) {
         console.error('Error getting animal:', error);
@@ -379,7 +407,10 @@ app.get('/api/sales', authenticate, async (req, res) => {
             
         const sales = salesSnapshot.docs.map(doc => ({
             id: doc.id,
-            ...doc.data()
+            ...doc.data(),
+            // Convertir timestamps a formato legible
+            saleDate: doc.data().saleDate?.toDate?.() || doc.data().saleDate,
+            createdAt: doc.data().createdAt?.toDate?.() || null
         }));
         
         res.json(sales);
@@ -485,7 +516,10 @@ app.get('/api/feeds', authenticate, async (req, res) => {
             
         const feeds = feedsSnapshot.docs.map(doc => ({
             id: doc.id,
-            ...doc.data()
+            ...doc.data(),
+            // Convertir timestamps a formato legible
+            feedingDate: doc.data().feedingDate?.toDate?.() || doc.data().feedingDate,
+            createdAt: doc.data().createdAt?.toDate?.() || null
         }));
         
         res.json(feeds);
@@ -568,7 +602,10 @@ app.get('/api/inventory', authenticate, async (req, res) => {
             
         const inventory = inventorySnapshot.docs.map(doc => ({
             id: doc.id,
-            ...doc.data()
+            ...doc.data(),
+            // Convertir timestamps a formato legible
+            lastUpdated: doc.data().lastUpdated?.toDate?.() || null,
+            createdAt: doc.data().createdAt?.toDate?.() || null
         }));
         
         res.json(inventory);
@@ -652,6 +689,11 @@ app.put('/api/inventory/:id/stock', authenticate, async (req, res) => {
             updatedStock = parseFloat(newStock);
         }
 
+        // Asegurar que el stock no sea negativo
+        if (updatedStock < 0) {
+            updatedStock = 0;
+        }
+
         await db.collection('inventory').doc(inventoryId).update({
             currentStock: updatedStock,
             lastUpdated: admin.firestore.FieldValue.serverTimestamp()
@@ -678,31 +720,34 @@ app.use((error, req, res, next) => {
     });
 });
 
+// ==================== MANEJO DE RUTAS NO ENCONTRADAS ====================
 
-
-// Manejo de rutas no encontradas
 app.use('*', (req, res) => {
     res.status(404).json({ 
         error: 'Ruta no encontrada',
         path: req.originalUrl,
+        method: req.method,
         availableEndpoints: [
-            'GET /',
-            'GET /api/health',
-            'POST /api/auth/create-admin',
-            'POST /api/auth/verify',
-            'GET /api/dashboard',
-            'GET /api/animals',
-            'POST /api/animals',
-            'GET /api/sales', 
-            'POST /api/sales',
-            'GET /api/feeds',
-            'POST /api/feeds',
-            'GET /api/inventory',
-            'POST /api/inventory'
+            'GET    /',
+            'GET    /api/health',
+            'POST   /api/auth/create-admin',
+            'POST   /api/auth/verify',
+            'GET    /api/dashboard',
+            'GET    /api/animals',
+            'POST   /api/animals',
+            'GET    /api/animals/:id',
+            'PUT    /api/animals/:id',
+            'DELETE /api/animals/:id',
+            'GET    /api/sales', 
+            'POST   /api/sales',
+            'GET    /api/feeds',
+            'POST   /api/feeds',
+            'GET    /api/inventory',
+            'POST   /api/inventory',
+            'PUT    /api/inventory/:id/stock'
         ]
     });
 });
-
 
 // ==================== EXPORTACIÓN ====================
 
