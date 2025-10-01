@@ -17,6 +17,202 @@ class App {
         this.checkAuthAndLoad();
     }
 
+    // ==================== INICIALIZACIÓN DE BASE DE DATOS ====================
+
+    async initializeDatabase() {
+        try {
+            this.showLoading(true);
+            console.log('🔄 Inicializando base de datos...');
+            
+            // Verificar si ya existen datos
+            const hasData = await this.checkExistingData();
+            if (hasData) {
+                console.log('✅ La base de datos ya tiene datos, omitiendo inicialización');
+                this.showAlert('La base de datos ya está inicializada', 'info');
+                return;
+            }
+
+            // Crear colecciones
+            await this.createAnimalsCollection();
+            await this.createFeedsCollection();
+            await this.createSalesCollection();
+            await this.createInventoryCollection();
+            
+            console.log('🎉 Base de datos inicializada exitosamente');
+            this.showAlert('Base de datos inicializada con datos de ejemplo', 'success');
+            
+        } catch (error) {
+            console.error('❌ Error inicializando base de datos:', error);
+            this.showAlert('Error al inicializar base de datos: ' + error.message, 'danger');
+        } finally {
+            this.showLoading(false);
+        }
+    }
+
+    async checkExistingData() {
+        try {
+            // Verificar si ya hay animales
+            const animals = await this.apiCall('/animals');
+            return animals && animals.length > 0;
+        } catch (error) {
+            // Si hay error 404 o similar, asumimos que no hay datos
+            return false;
+        }
+    }
+
+    async createAnimalsCollection() {
+        const animals = [
+            {
+                name: "Borrego Blanco",
+                earTag: "A001",
+                breed: "Katahdin",
+                gender: "male",
+                birthDate: "2023-05-15",
+                weight: 45.5,
+                status: "active",
+                notes: "Borrego saludable y activo"
+            },
+            {
+                name: "Borrego Negro",
+                earTag: "A002",
+                breed: "Dorper",
+                gender: "female",
+                birthDate: "2023-06-20",
+                weight: 42.0,
+                status: "active",
+                notes: "Hembra reproductora"
+            },
+            {
+                name: "Borrego Grande",
+                earTag: "A003",
+                breed: "Suffolk",
+                gender: "male",
+                birthDate: "2023-04-10",
+                weight: 52.5,
+                status: "active",
+                notes: "Para venta próxima"
+            }
+        ];
+
+        for (const animal of animals) {
+            await this.apiCall('/animals', {
+                method: 'POST',
+                body: animal
+            });
+            console.log(`✅ Animal creado: ${animal.name}`);
+        }
+    }
+
+    async createFeedsCollection() {
+        const feeds = [
+            {
+                feedType: "Alfalfa",
+                quantity: 10,
+                unit: "kg",
+                animalEarTag: "A001",
+                animalName: "Borrego Blanco",
+                feedingDate: new Date().toISOString().split('T')[0],
+                notes: "Alimentación matutina"
+            },
+            {
+                feedType: "Concentrado",
+                quantity: 5,
+                unit: "kg",
+                feedingDate: new Date().toISOString().split('T')[0],
+                notes: "Alimentación general del rebaño"
+            }
+        ];
+
+        for (const feed of feeds) {
+            await this.apiCall('/feeds', {
+                method: 'POST',
+                body: feed
+            });
+            console.log(`✅ Alimentación creada: ${feed.feedType}`);
+        }
+    }
+
+    async createSalesCollection() {
+        const sales = [
+            {
+                animalEarTag: "A001",
+                animalName: "Borrego Blanco",
+                salePrice: 2500.00,
+                weightAtSale: 48.5,
+                buyerName: "Juan Pérez",
+                buyerContact: "555-1234",
+                saleDate: "2024-01-10",
+                notes: "Venta directa en granja"
+            },
+            {
+                animalEarTag: "A002", 
+                animalName: "Borrego Negro",
+                salePrice: 2300.00,
+                weightAtSale: 45.0,
+                buyerName: "María García",
+                buyerContact: "555-5678",
+                saleDate: "2024-01-08",
+                notes: "Venta por contrato"
+            }
+        ];
+
+        for (const sale of sales) {
+            await this.apiCall('/sales', {
+                method: 'POST',
+                body: sale
+            });
+            console.log(`✅ Venta creada: ${sale.animalName}`);
+        }
+    }
+
+    async createInventoryCollection() {
+        const inventory = [
+            {
+                item_type: "medicine",
+                itemName: "Antibiótico Ovinos",
+                currentStock: 5,
+                minStock: 10,
+                unit: "unidades",
+                price: 150.00,
+                supplier: "Farmacia Veterinaria SA",
+                purchase_date: "2024-01-01",
+                expiration_date: "2024-12-31",
+                notes: "Antibiótico de amplio espectro"
+            },
+            {
+                item_type: "supplies",
+                itemName: "Alimento Concentrado",
+                currentStock: 500,
+                minStock: 100,
+                unit: "kg",
+                price: 25.50,
+                supplier: "Alimentos Premium",
+                purchase_date: "2024-01-05",
+                expiration_date: "2024-06-30",
+                notes: "Alimento para crecimiento"
+            },
+            {
+                item_type: "tools",
+                itemName: "Tijeras de Esquila",
+                currentStock: 2,
+                minStock: 1,
+                unit: "unidades",
+                price: 450.00,
+                supplier: "Herramientas Agro",
+                purchase_date: "2023-12-15",
+                notes: "Tijeras profesionales para esquila"
+            }
+        ];
+
+        for (const item of inventory) {
+            await this.apiCall('/inventory', {
+                method: 'POST',
+                body: item
+            });
+            console.log(`✅ Inventario creado: ${item.itemName}`);
+        }
+    }
+
     // ==================== AUTENTICACIÓN ====================
 
     async checkAuthAndLoad() {
@@ -32,6 +228,11 @@ class App {
                     this.currentUser = response.user;
                     this.showApp();
                     this.loadDashboardData();
+                    
+                    // Verificar e inicializar base de datos si es necesario
+                    setTimeout(() => {
+                        this.checkAndInitializeDatabase();
+                    }, 2000);
                 } else {
                     this.showLogin();
                 }
@@ -44,15 +245,31 @@ class App {
         }
     }
 
+    async checkAndInitializeDatabase() {
+        try {
+            const hasData = await this.checkExistingData();
+            if (!hasData) {
+                console.log('📊 Base de datos vacía, ofreciendo inicialización...');
+                this.showDatabaseInitializationPrompt();
+            }
+        } catch (error) {
+            console.log('⚠️ No se pudo verificar el estado de la base de datos:', error);
+        }
+    }
+
+    showDatabaseInitializationPrompt() {
+        if (confirm('¿Deseas inicializar la base de datos con datos de ejemplo? Esto creará animales, alimentación, ventas e inventario de prueba.')) {
+            this.initializeDatabase();
+        }
+    }
+
     showLogin() {
-        // Ocultar aplicación y mostrar login
         document.getElementById('app-container').style.display = 'none';
         document.getElementById('login-container').style.display = 'block';
         document.getElementById('register-container').style.display = 'none';
     }
 
     showApp() {
-        // Ocultar login y mostrar aplicación
         document.getElementById('login-container').style.display = 'none';
         document.getElementById('register-container').style.display = 'none';
         document.getElementById('app-container').style.display = 'block';
@@ -63,7 +280,6 @@ class App {
         document.getElementById('register-container').style.display = 'block';
     }
 
-    // Método para mensajes de error de Auth
     getAuthErrorMessage(errorCode) {
         const messages = {
             'EMAIL_EXISTS': 'Este correo electrónico ya está registrado',
@@ -116,7 +332,7 @@ class App {
                 name: name
             };
 
-            // 3. Crear perfil en nuestro backend (Firebase Functions)
+            // 3. Crear perfil en nuestro backend
             try {
                 const profileResponse = await this.apiCall('/auth/create-admin', {
                     method: 'POST',
@@ -129,7 +345,6 @@ class App {
                 console.log('✅ Perfil creado en backend:', profileResponse);
             } catch (profileError) {
                 console.warn('⚠️ Error creando perfil:', profileError);
-                // Continuamos aunque falle la creación del perfil
             }
 
             this.showAlert('¡Cuenta creada exitosamente!', 'success');
@@ -144,7 +359,6 @@ class App {
         }
     }
 
-    // Método para login - CON OPCIÓN 1 IMPLEMENTADA
     async handleLogin(form) {
         try {
             this.showLoading(true);
@@ -182,7 +396,7 @@ class App {
                 name: authData.displayName || email
             };
 
-            // 🔥 OPCIÓN 1 IMPLEMENTADA: Crear/verificar perfil en Firestore automáticamente
+            // Crear/verificar perfil en Firestore
             try {
                 console.log('🔄 Verificando/Creando perfil en Firestore...');
                 const profileResponse = await this.apiCall('/auth/create-admin', {
@@ -196,7 +410,6 @@ class App {
                 console.log('✅ Perfil creado/verificado en Firestore:', profileResponse);
             } catch (profileError) {
                 console.warn('⚠️ Error creando/verificando perfil:', profileError);
-                // Continuamos aunque falle la creación del perfil para no bloquear el login
                 this.showAlert('Login exitoso, pero hubo un problema con el perfil. Puede que algunas funciones no estén disponibles.', 'warning');
             }
 
@@ -246,7 +459,6 @@ class App {
             const response = await fetch(`${this.API_BASE_URL}${endpoint}`, config);
 
             if (response.status === 401) {
-                // Token inválido, redirigir a login
                 this.showLogin();
                 throw new Error('Sesión expirada');
             }
@@ -263,7 +475,6 @@ class App {
         } catch (error) {
             console.error('❌ API Call error:', error);
             
-            // No mostrar alerta para errores de autenticación (ya se manejan arriba)
             if (!error.message.includes('Sesión expirada')) {
                 this.showAlert('Error en la conexión: ' + error.message, 'danger');
             }
@@ -281,7 +492,6 @@ class App {
             this.updateDashboardUI(data);
         } catch (error) {
             console.error('Error loading dashboard:', error);
-            // Mostrar un mensaje más específico para el error 404
             if (error.message.includes('404') && error.message.includes('Usuario no encontrado')) {
                 this.showAlert('Error: Perfil de usuario incompleto. Por favor, contacta al administrador.', 'danger');
             } else {
@@ -293,7 +503,6 @@ class App {
     }
 
     updateDashboardUI(data) {
-        // Actualizar tarjetas de estadísticas
         if (document.getElementById('total-animals')) {
             document.getElementById('total-animals').textContent = data.total_animals || 0;
         }
@@ -307,7 +516,6 @@ class App {
             document.getElementById('total-inventory').textContent = data.total_inventory || 0;
         }
         
-        // Actualizar alertas
         if (document.getElementById('low-stock-alert')) {
             document.getElementById('low-stock-alert').textContent = (data.low_stock_items || 0) + ' items';
         }
@@ -319,61 +527,46 @@ class App {
     // ==================== NAVEGACIÓN Y VISTAS ====================
 
     showView(viewName) {
-        // Verificar autenticación antes de mostrar vista
         if (!this.currentUser && viewName !== 'dashboard') {
             this.showLogin();
             return;
         }
 
-        // Ocultar todas las vistas
         document.querySelectorAll('.view-container').forEach(view => {
             view.style.display = 'none';
         });
 
-        // Mostrar vista actual
         const currentView = document.getElementById(`${viewName}-view`);
         if (currentView) {
             currentView.style.display = 'block';
             
-            // Disparar evento cuando se carga una vista
             const event = new CustomEvent(`${viewName}ViewLoaded`);
             document.dispatchEvent(event);
         }
 
         this.currentView = viewName;
         this.updateActiveNav();
-
-        // Cargar datos específicos de la vista
         this.loadViewData(viewName);
     }
 
     loadViewData(viewName) {
         switch (viewName) {
             case 'animals':
-                if (window.animalsManager) {
-                    window.animalsManager.loadAnimals();
-                }
+                if (window.animalsManager) window.animalsManager.loadAnimals();
                 break;
             case 'sales':
-                if (window.salesManager) {
-                    window.salesManager.loadSales();
-                }
+                if (window.salesManager) window.salesManager.loadSales();
                 break;
             case 'feeds':
-                if (window.feedsManager) {
-                    window.feedsManager.loadFeeds();
-                }
+                if (window.feedsManager) window.feedsManager.loadFeeds();
                 break;
             case 'inventory':
-                if (window.inventoryManager) {
-                    window.inventoryManager.loadInventory();
-                }
+                if (window.inventoryManager) window.inventoryManager.loadInventory();
                 break;
         }
     }
 
     updateActiveNav() {
-        // Actualizar navegación activa
         document.querySelectorAll('.nav-link').forEach(link => {
             link.classList.remove('active');
         });
@@ -387,7 +580,6 @@ class App {
     // ==================== UTILIDADES UI ====================
 
     showAlert(message, type = 'info', duration = 5000) {
-        // Remover alertas existentes del mismo tipo
         const existingAlerts = document.querySelectorAll('.alert-dismissible');
         existingAlerts.forEach(alert => {
             if (alert.textContent.includes(message.substring(0, 20))) {
@@ -482,7 +674,6 @@ class App {
         for (let [key, value] of formData.entries()) {
             if (value === '') continue;
             
-            // Convertir números y valores booleanos
             if (key.includes('price') || key.includes('weight') || 
                 key.includes('stock') || key.includes('quantity') ||
                 key.includes('amount')) {
@@ -499,7 +690,6 @@ class App {
 
     resetForm(form) {
         form.reset();
-        // Limpiar datos de edición
         if (form.dataset.editId) {
             delete form.dataset.editId;
         }
@@ -538,7 +728,6 @@ class App {
         const modal = new bootstrap.Modal(modalElement);
         modal.show();
 
-        // Enfocar el primer campo del formulario cuando se muestra el modal
         modalElement.addEventListener('shown.bs.modal', () => {
             const firstInput = modalElement.querySelector('input, select, textarea');
             if (firstInput) firstInput.focus();
@@ -553,59 +742,12 @@ class App {
         }
     }
 
-    // ==================== VALIDACIONES ====================
-
-    validateRequiredFields(form, requiredFields) {
-        const errors = [];
-        const formData = this.getFormData(form);
-
-        requiredFields.forEach(field => {
-            if (!formData[field] || formData[field].toString().trim() === '') {
-                errors.push(`El campo ${field} es requerido`);
-            }
-        });
-
-        if (errors.length > 0) {
-            this.showAlert(errors.join('<br>'), 'warning');
-            return false;
-        }
-
-        return true;
-    }
-
-    validateNumber(value, min = 0, max = Infinity) {
-        const num = parseFloat(value);
-        return !isNaN(num) && num >= min && num <= max;
-    }
-
-    // ==================== FORMATO DE DATOS ====================
-
-    formatCurrency(amount) {
-        return new Intl.NumberFormat('es-MX', {
-            style: 'currency',
-            currency: 'MXN'
-        }).format(amount);
-    }
-
-    formatDate(dateString) {
-        if (!dateString) return 'N/A';
-        return new Date(dateString).toLocaleDateString('es-MX');
-    }
-
-    formatDateTime(dateString) {
-        if (!dateString) return 'N/A';
-        return new Date(dateString).toLocaleString('es-MX');
-    }
-
     // ==================== EVENT LISTENERS ====================
 
     setupEventListeners() {
         console.log('🔧 Configurando event listeners...');
-        
-        // CONEXIÓN MANUAL DE FORMULARIOS - GARANTIZADA
         this.connectFormsManually();
 
-        // Navegación principal
         document.addEventListener('click', (e) => {
             if (e.target.matches('[data-view]') || e.target.closest('[data-view]')) {
                 const target = e.target.matches('[data-view]') ? e.target : e.target.closest('[data-view]');
@@ -614,21 +756,18 @@ class App {
             }
         });
 
-        // Botón de refresh del dashboard
         document.addEventListener('click', (e) => {
             if (e.target.matches('#refresh-dashboard') || e.target.closest('#refresh-dashboard')) {
                 this.loadDashboardData();
             }
         });
 
-        // Cerrar modales al hacer click fuera
         document.addEventListener('click', (e) => {
             if (e.target.classList.contains('modal')) {
                 this.hideModal(e.target.id);
             }
         });
 
-        // Manejar tecla Escape para cerrar modales
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 const openModal = document.querySelector('.modal.show');
@@ -639,7 +778,6 @@ class App {
         });
     }
 
-    // NUEVO MÉTODO: Conexión manual garantizada de formularios
     connectFormsManually() {
         console.log('🔗 Conectando formularios manualmente...');
         
@@ -712,56 +850,23 @@ class App {
         }
     }
 
-    // ==================== UTILIDADES DE RENDERING ====================
+    // ==================== FORMATO DE DATOS ====================
 
-    createCard(title, content, options = {}) {
-        const { type = 'default', icon = '', actions = [] } = options;
-        
-        const typeClasses = {
-            'default': '',
-            'success': 'border-success',
-            'warning': 'border-warning',
-            'danger': 'border-danger',
-            'info': 'border-info'
-        };
-
-        return `
-            <div class="card ${typeClasses[type]} mb-3">
-                <div class="card-body">
-                    <h5 class="card-title">
-                        ${icon ? `<i class="${icon} me-2"></i>` : ''}
-                        ${title}
-                    </h5>
-                    <div class="card-text">${content}</div>
-                    ${actions.length > 0 ? `
-                        <div class="mt-3">
-                            ${actions.map(action => 
-                                `<button class="btn btn-${action.type} btn-sm me-2" 
-                                 onclick="${action.onclick}">${action.label}</button>`
-                            ).join('')}
-                        </div>
-                    ` : ''}
-                </div>
-            </div>
-        `;
+    formatCurrency(amount) {
+        return new Intl.NumberFormat('es-MX', {
+            style: 'currency',
+            currency: 'MXN'
+        }).format(amount);
     }
 
-    createBadge(text, type = 'secondary') {
-        return `<span class="badge bg-${type}">${text}</span>`;
+    formatDate(dateString) {
+        if (!dateString) return 'N/A';
+        return new Date(dateString).toLocaleDateString('es-MX');
     }
 
-    createEmptyState(message, icon = 'info-circle', action = null) {
-        return `
-            <div class="text-center py-5">
-                <i class="fas fa-${icon} fa-3x text-muted mb-3"></i>
-                <p class="text-muted">${message}</p>
-                ${action ? `
-                    <button class="btn btn-primary mt-2" onclick="${action.onclick}">
-                        ${action.label}
-                    </button>
-                ` : ''}
-            </div>
-        `;
+    formatDateTime(dateString) {
+        if (!dateString) return 'N/A';
+        return new Date(dateString).toLocaleString('es-MX');
     }
 
     // ==================== MANEJO DE ERRORES ====================
@@ -801,7 +906,6 @@ function initializeAppWithRetry() {
             console.log('📄 DOM completamente cargado');
             const app = App.init();
             
-            // Reconectar formularios después de un delay para asegurar
             setTimeout(() => {
                 if (app && app.connectFormsManually) {
                     app.connectFormsManually();
@@ -832,4 +936,13 @@ window.formatCurrency = (amount) => {
 
 window.formatDate = (dateString) => {
     return window.app ? window.app.formatDate(dateString) : dateString;
+};
+
+// Función global para inicializar base de datos (desde consola del navegador)
+window.initializeDatabase = function() {
+    if (window.app) {
+        window.app.initializeDatabase();
+    } else {
+        console.error('App no está inicializada');
+    }
 };
