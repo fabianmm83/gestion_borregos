@@ -1,9 +1,8 @@
-// Configuración global
-const API_BASE_URL = 'https://us-central1-gestionborregos.cloudfunctions.net';
-const FIREBASE_API_KEY = 'AIzaSyC7XrvX6AOAUP7dhd6yR4xIO0aqRwGe5nk';
-
 class App {
     constructor() {
+        // Configuraciones
+        this.API_BASE_URL = 'https://us-central1-gestionborregos.cloudfunctions.net';
+        this.FIREBASE_API_KEY = 'AIzaSyC7XrvX6AOAUP7dhd6yR4xIO0aqRwGe5nk';
         this.currentView = 'dashboard';
         this.currentUser = null;
         this.init();
@@ -18,189 +17,189 @@ class App {
         this.checkAuthAndLoad();
     }
 
-   // ==================== AUTENTICACIÓN ====================
+    // ==================== AUTENTICACIÓN ====================
 
-async checkAuthAndLoad() {
-    const token = localStorage.getItem('authToken');
-    if (token) {
-        try {
-            const response = await this.apiCall('/api/auth/verify', {
-                method: 'POST',
-                body: { token }
-            });
-            
-            if (response.valid) {
-                this.currentUser = response.user;
-                this.showApp();
-                this.loadDashboardData();
-            } else {
+    async checkAuthAndLoad() {
+        const token = localStorage.getItem('authToken');
+        if (token) {
+            try {
+                const response = await this.apiCall('/api/auth/verify', {
+                    method: 'POST',
+                    body: { token }
+                });
+                
+                if (response.valid) {
+                    this.currentUser = response.user;
+                    this.showApp();
+                    this.loadDashboardData();
+                } else {
+                    this.showLogin();
+                }
+            } catch (error) {
+                console.error('Auth check error:', error);
                 this.showLogin();
             }
-        } catch (error) {
-            console.error('Auth check error:', error);
+        } else {
             this.showLogin();
         }
-    } else {
-        this.showLogin();
     }
-}
 
-showLogin() {
-    // Ocultar aplicación y mostrar login
-    document.getElementById('app-container').style.display = 'none';
-    document.getElementById('login-container').style.display = 'block';
-    document.getElementById('register-container').style.display = 'none';
-}
+    showLogin() {
+        // Ocultar aplicación y mostrar login
+        document.getElementById('app-container').style.display = 'none';
+        document.getElementById('login-container').style.display = 'block';
+        document.getElementById('register-container').style.display = 'none';
+    }
 
-showApp() {
-    // Ocultar login y mostrar aplicación
-    document.getElementById('login-container').style.display = 'none';
-    document.getElementById('register-container').style.display = 'none';
-    document.getElementById('app-container').style.display = 'block';
-}
+    showApp() {
+        // Ocultar login y mostrar aplicación
+        document.getElementById('login-container').style.display = 'none';
+        document.getElementById('register-container').style.display = 'none';
+        document.getElementById('app-container').style.display = 'block';
+    }
 
-showRegister() {
-    document.getElementById('login-container').style.display = 'none';
-    document.getElementById('register-container').style.display = 'block';
-}
+    showRegister() {
+        document.getElementById('login-container').style.display = 'none';
+        document.getElementById('register-container').style.display = 'block';
+    }
 
-// Método para mensajes de error de Auth
-getAuthErrorMessage(errorCode) {
-    const messages = {
-        'EMAIL_EXISTS': 'Este correo electrónico ya está registrado',
-        'OPERATION_NOT_ALLOWED': 'El registro con email/contraseña no está habilitado',
-        'TOO_MANY_ATTEMPTS_TRY_LATER': 'Demasiados intentos. Intenta más tarde',
-        'EMAIL_NOT_FOUND': 'Correo electrónico no encontrado',
-        'INVALID_PASSWORD': 'Contraseña incorrecta',
-        'USER_DISABLED': 'Esta cuenta ha sido deshabilitada',
-        'INVALID_EMAIL': 'Correo electrónico inválido',
-        'WEAK_PASSWORD': 'La contraseña es muy débil'
-    };
-    return messages[errorCode] || 'Error de autenticación: ' + errorCode;
-}
-
-async handleRegister(form) {
-    try {
-        this.showLoading(true);
-        const name = document.getElementById('register-name').value;
-        const email = document.getElementById('register-email').value;
-        const password = document.getElementById('register-password').value;
-
-        console.log('Intentando crear cuenta:', { name, email });
-
-        // 1. Crear usuario en Firebase Auth
-        const authResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${FIREBASE_API_KEY}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                email,
-                password,
-                returnSecureToken: true
-            })
-        });
-
-        const authData = await authResponse.json();
-
-        if (authData.error) {
-            throw new Error(this.getAuthErrorMessage(authData.error.message));
-        }
-
-        console.log('✅ Usuario creado en Auth:', authData);
-
-        // 2. Guardar el token inmediatamente
-        localStorage.setItem('authToken', authData.idToken);
-        this.currentUser = {
-            uid: authData.localId,
-            email: authData.email,
-            name: name
+    // Método para mensajes de error de Auth
+    getAuthErrorMessage(errorCode) {
+        const messages = {
+            'EMAIL_EXISTS': 'Este correo electrónico ya está registrado',
+            'OPERATION_NOT_ALLOWED': 'El registro con email/contraseña no está habilitado',
+            'TOO_MANY_ATTEMPTS_TRY_LATER': 'Demasiados intentos. Intenta más tarde',
+            'EMAIL_NOT_FOUND': 'Correo electrónico no encontrado',
+            'INVALID_PASSWORD': 'Contraseña incorrecta',
+            'USER_DISABLED': 'Esta cuenta ha sido deshabilitada',
+            'INVALID_EMAIL': 'Correo electrónico inválido',
+            'WEAK_PASSWORD': 'La contraseña es muy débil'
         };
+        return messages[errorCode] || 'Error de autenticación: ' + errorCode;
+    }
 
-        // 3. Crear perfil en nuestro backend (Firebase Functions)
+    async handleRegister(form) {
         try {
-            const profileResponse = await this.apiCall('/api/auth/create-admin', {
+            this.showLoading(true);
+            const name = document.getElementById('register-name').value;
+            const email = document.getElementById('register-email').value;
+            const password = document.getElementById('register-password').value;
+
+            console.log('Intentando crear cuenta:', { name, email });
+
+            // 1. Crear usuario en Firebase Auth
+            const authResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${this.FIREBASE_API_KEY}`, {
                 method: 'POST',
-                body: { 
-                    email, 
-                    name,
-                    uid: authData.localId
-                }
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    email,
+                    password,
+                    returnSecureToken: true
+                })
             });
-            console.log('✅ Perfil creado en backend:', profileResponse);
-        } catch (profileError) {
-            console.warn('⚠️ Error creando perfil:', profileError);
-            // Continuamos aunque falle la creación del perfil
+
+            const authData = await authResponse.json();
+
+            if (authData.error) {
+                throw new Error(this.getAuthErrorMessage(authData.error.message));
+            }
+
+            console.log('✅ Usuario creado en Auth:', authData);
+
+            // 2. Guardar el token inmediatamente
+            localStorage.setItem('authToken', authData.idToken);
+            this.currentUser = {
+                uid: authData.localId,
+                email: authData.email,
+                name: name
+            };
+
+            // 3. Crear perfil en nuestro backend (Firebase Functions)
+            try {
+                const profileResponse = await this.apiCall('/api/auth/create-admin', {
+                    method: 'POST',
+                    body: { 
+                        email, 
+                        name,
+                        uid: authData.localId
+                    }
+                });
+                console.log('✅ Perfil creado en backend:', profileResponse);
+            } catch (profileError) {
+                console.warn('⚠️ Error creando perfil:', profileError);
+                // Continuamos aunque falle la creación del perfil
+            }
+
+            this.showAlert('¡Cuenta creada exitosamente!', 'success');
+            this.showApp();
+            this.loadDashboardData();
+            
+        } catch (error) {
+            console.error('❌ Error completo al registrar:', error);
+            this.showAlert('Error al crear cuenta: ' + error.message, 'danger');
+        } finally {
+            this.showLoading(false);
         }
-
-        this.showAlert('¡Cuenta creada exitosamente!', 'success');
-        this.showApp();
-        this.loadDashboardData();
-        
-    } catch (error) {
-        console.error('❌ Error completo al registrar:', error);
-        this.showAlert('Error al crear cuenta: ' + error.message, 'danger');
-    } finally {
-        this.showLoading(false);
     }
-}
 
-// Método para login
-async handleLogin(form) {
-    try {
-        this.showLoading(true);
-        const email = document.getElementById('login-email').value;
-        const password = document.getElementById('login-password').value;
+    // Método para login
+    async handleLogin(form) {
+        try {
+            this.showLoading(true);
+            const email = document.getElementById('login-email').value;
+            const password = document.getElementById('login-password').value;
 
-        console.log('Intentando login:', { email });
+            console.log('Intentando login:', { email });
 
-        // Login con Firebase Auth
-        const authResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                email,
-                password,
-                returnSecureToken: true
-            })
-        });
+            // Login con Firebase Auth
+            const authResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${this.FIREBASE_API_KEY}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    email,
+                    password,
+                    returnSecureToken: true
+                })
+            });
 
-        const authData = await authResponse.json();
+            const authData = await authResponse.json();
 
-        if (authData.error) {
-            throw new Error(this.getAuthErrorMessage(authData.error.message));
+            if (authData.error) {
+                throw new Error(this.getAuthErrorMessage(authData.error.message));
+            }
+
+            console.log('✅ Login exitoso:', authData);
+
+            // Guardar token y usuario
+            localStorage.setItem('authToken', authData.idToken);
+            this.currentUser = {
+                uid: authData.localId,
+                email: authData.email,
+                name: authData.displayName || email
+            };
+
+            this.showAlert('¡Bienvenido!', 'success');
+            this.showApp();
+            this.loadDashboardData();
+            
+        } catch (error) {
+            console.error('❌ Error en login:', error);
+            this.showAlert('Error al iniciar sesión: ' + error.message, 'danger');
+        } finally {
+            this.showLoading(false);
         }
-
-        console.log('✅ Login exitoso:', authData);
-
-        // Guardar token y usuario
-        localStorage.setItem('authToken', authData.idToken);
-        this.currentUser = {
-            uid: authData.localId,
-            email: authData.email,
-            name: authData.displayName || email
-        };
-
-        this.showAlert('¡Bienvenido!', 'success');
-        this.showApp();
-        this.loadDashboardData();
-        
-    } catch (error) {
-        console.error('❌ Error en login:', error);
-        this.showAlert('Error al iniciar sesión: ' + error.message, 'danger');
-    } finally {
-        this.showLoading(false);
     }
-}
 
-logout() {
-    localStorage.removeItem('authToken');
-    this.currentUser = null;
-    this.showLogin();
-    this.showAlert('Sesión cerrada correctamente', 'info');
-}
+    logout() {
+        localStorage.removeItem('authToken');
+        this.currentUser = null;
+        this.showLogin();
+        this.showAlert('Sesión cerrada correctamente', 'info');
+    }
 
     // ==================== COMUNICACIÓN CON API ====================
 
@@ -226,7 +225,7 @@ logout() {
 
             console.log('🌐 API Call:', endpoint, config);
 
-            const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
+            const response = await fetch(`${this.API_BASE_URL}${endpoint}`, config);
 
             if (response.status === 401) {
                 // Token inválido, redirigir a login
