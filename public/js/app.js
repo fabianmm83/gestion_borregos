@@ -402,7 +402,6 @@ isTokenExpired(token) {
     }
 }
 
-    // ==================== DASHBOARD ====================
 
 // ==================== DASHBOARD ====================
 
@@ -414,25 +413,46 @@ async loadDashboardData() {
         const response = await this.apiCall('/dashboard');
         console.log('📈 Respuesta completa del dashboard:', response);
         
+        // ✅ DEBUG TEMPORAL - VER ESTRUCTURA EXACTA
+        console.log('🔍 Estructura de response.data:', response.data);
+        console.log('🔍 Keys de response.data:', response.data ? Object.keys(response.data) : 'No data');
+        
         // ✅ EXTRAER DATOS CORRECTAMENTE DE LA RESPUESTA
         let dashboardData = {};
         
         if (response && typeof response === 'object') {
             // Si la respuesta tiene data, usarla
-            if (response.data) {
+            if (response.data && typeof response.data === 'object') {
                 dashboardData = response.data;
+                console.log('🎯 Usando response.data:', dashboardData);
             } else {
                 // Usar la respuesta directamente
                 dashboardData = response;
+                console.log('🎯 Usando response directamente:', dashboardData);
             }
         }
         
-        // ✅ VALORES POR DEFECTO SEGUROS
+        // ✅ VALORES POR DEFECTO SEGUROS - BUSCAR EN DIFERENTES FORMATOS
         const finalData = {
-            total_animals: dashboardData.total_animals || dashboardData.totalAnimals || 0,
-            active_animals: dashboardData.active_animals || dashboardData.activeAnimals || 0,
-            low_stock_items: dashboardData.low_stock_items || dashboardData.lowStockItems || 0,
-            total_inventory: dashboardData.total_inventory || dashboardData.totalInventory || 0
+            total_animals: dashboardData.total_animals || 
+                          dashboardData.totalAnimals || 
+                          dashboardData.animals_total ||
+                          (dashboardData.animals ? dashboardData.animals.total : 0) || 0,
+            
+            active_animals: dashboardData.active_animals || 
+                           dashboardData.activeAnimals || 
+                           dashboardData.animals_active ||
+                           (dashboardData.animals ? dashboardData.animals.active : 0) || 0,
+            
+            low_stock_items: dashboardData.low_stock_items || 
+                            dashboardData.lowStockItems || 
+                            dashboardData.inventory_low ||
+                            (dashboardData.inventory ? dashboardData.inventory.low_stock : 0) || 0,
+            
+            total_inventory: dashboardData.total_inventory || 
+                           dashboardData.totalInventory || 
+                           dashboardData.inventory_total ||
+                           (dashboardData.inventory ? dashboardData.inventory.total : 0) || 0
         };
         
         console.log('🎯 Datos finales para UI:', finalData);
@@ -457,11 +477,19 @@ async loadDashboardData() {
 updateDashboardUI(data) {
     console.log('🎨 Actualizando UI del dashboard con:', data);
     
+    // ✅ DEBUG TEMPORAL - VERIFICAR QUE LOS ELEMENTOS EXISTAN
+    console.log('🔍 Buscando elementos del DOM:');
+    console.log('total-animals:', document.getElementById('total-animals'));
+    console.log('active-animals:', document.getElementById('active-animals'));
+    console.log('low-stock-items:', document.getElementById('low-stock-items'));
+    console.log('total-inventory:', document.getElementById('total-inventory'));
+    
     // ✅ FUNCIÓN SEGURA PARA ACTUALIZAR ELEMENTOS
     const updateElement = (id, value) => {
         const element = document.getElementById(id);
         if (element) {
             element.textContent = value;
+            console.log(`✅ Actualizado ${id}: ${value}`);
         } else {
             console.warn(`❌ Elemento ${id} no encontrado`);
         }
@@ -478,6 +506,15 @@ updateDashboardUI(data) {
     updateElement('active-animals-alert', (data.active_animals || 0) + ' animales');
     
     console.log('✅ Dashboard actualizado correctamente');
+    
+    // ✅ VERIFICAR VALORES ACTUALES DESPUÉS DE ACTUALIZAR
+    setTimeout(() => {
+        console.log('🔍 Valores actuales en UI:');
+        console.log('total-animals:', document.getElementById('total-animals')?.textContent);
+        console.log('active-animals:', document.getElementById('active-animals')?.textContent);
+        console.log('low-stock-items:', document.getElementById('low-stock-items')?.textContent);
+        console.log('total-inventory:', document.getElementById('total-inventory')?.textContent);
+    }, 100);
 }
 
     // ==================== NAVEGACIÓN Y VISTAS ====================
