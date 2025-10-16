@@ -1438,9 +1438,57 @@ app.get('/purchases', authenticate, async (req, res) => {
         res.status(500).json(createResponse(false, null, 'Error al obtener compras', error.message));
     }
 });
+// Endpoint de diagnóstico para compras - AGREGAR ESTO
+app.get('/debug/purchases', authenticate, async (req, res) => {
+    try {
+        const userId = req.user.uid;
+        
+        logger.info('Diagnóstico de compras solicitado', { userId });
+        
+        // Verificar si la colección existe y tiene documentos
+        const purchasesSnapshot = await db.collection(COLLECTIONS.PURCHASES)
+            .where('userId', '==', userId)
+            .limit(10)
+            .get();
+
+        const purchases = purchasesSnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            createdAt: doc.data().createdAt?.toDate?.() || null
+        }));
+
+        // Verificar estructura de la colección
+        const collectionRef = db.collection(COLLECTIONS.PURCHASES);
+        const sampleQuery = await collectionRef.limit(1).get();
+        
+        res.json(createResponse(true, {
+            collection: COLLECTIONS.PURCHASES,
+            totalPurchases: purchases.length,
+            purchases: purchases,
+            collectionExists: !sampleQuery.empty,
+            userHasPurchases: purchases.length > 0,
+            firestoreConfig: {
+                projectId: process.env.GCLOUD_PROJECT,
+                region: 'us-central1'
+            },
+            timestamp: new Date().toISOString()
+        }, 'Diagnóstico de compras completado'));
+
+    } catch (error) {
+        logger.error('Error en diagnóstico de compras:', error);
+        res.status(500).json(createResponse(false, null, 'Error en diagnóstico', {
+            error: error.message,
+            code: error.code,
+            stack: error.stack
+        }));
+    }
+});
 
 // Registrar nueva compra
+// Registrar nueva compra - VERSIÓN MEJORADA CON MÁS LOGGING
 app.post('/purchases', authenticate, async (req, res) => {
+    let purchaseRef;
+    
     try {
         const userId = req.user.uid;
         const {
@@ -1455,40 +1503,117 @@ app.post('/purchases', authenticate, async (req, res) => {
             notes
         } = req.body;
 
-        logger.info('Registrando nueva compra', { itemName, type, userId });
+        // LOG DETALLADO DE LA SOLICITUD
+        logger.info('🔍 SOLICITUD DE COMPRA RECIBIDA:', {
+            userId,
+            body: req.body,
+            headers: req.headers,
+            timestamp: new Date().toISOString()
+        });
 
-        // Validaciones
-        if (!itemName || !type || !totalCost) {
+        // Validaciones mejoradas
+        if (!itemName || !type) {
+            logger.warn('Validación fallida: campos requeridos faltantes', { itemName, type });
             return res.status(400).json(
-                createResponse(false, null, 'Nombre, tipo y costo total son obligatorios', 'MISSING_REQUIRED_FIELDS')
+                createResponse(false, null, 'Nombre y tipo son obligatorios', 'MISSING_REQUIRED_FIELDS')
             );
         }
 
+        const cost = totalCost || unitCost;
+        if (!cost && cost !== 0) {
+            logger.warn('Validación fallida: costo faltante');
+            return res.status(400).json(
+                createResponse(false, null, 'Costo total o unitario es obligatorio', 'MISSING_COST')
+            );
+        }
+
+        // Preparar datos
         const purchaseData = {
             userId,
-            itemName,
-            type,
+            itemName: itemName.toString().trim(),
+            type: type.toString().trim(),
             quantity: quantity ? parseFloat(quantity) : 1,
             unit: unit || 'unidad',
-            unitCost: unitCost ? parseFloat(unitCost) : parseFloat(totalCost),
-            totalCost: parseFloat(totalCost),
+            unitCost: unitCost ? parseFloat(unitCost) : parseFloat(cost),
+            totalCost: parseFloat(cost),
             purchaseDate: purchaseDate || new Date().toISOString().split('T')[0],
             supplier: supplier || '',
             notes: notes || '',
-            createdAt: admin.firestore.FieldValue.serverTimestamp()
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
         };
 
-        const purchaseRef = await db.collection(COLLECTIONS.PURCHASES).add(purchaseData);
-        logger.info('Compra registrada exitosamente', { purchaseId: purchaseRef.id });
+        logger.info('📝 DATOS PREPARADOS PARA FIRESTORE:', {
+            purchaseData,
+            collection: COLLECTIONS.PURCHASES
+        });
 
-        res.status(201).json(createResponse(true, {
+        // INTENTAR GUARDAR EN FIRESTORE
+        logger.info('💾 INTENTANDO GUARDAR EN FIRESTORE...');
+        purchaseRef = await db.collection(COLLECTIONS.PURCHASES).add(purchaseData);
+        
+        logger.info('✅ ESCRITURA EN FIRESTORE EXITOSA:', {
+            purchaseId: purchaseRef.id,
+            collection: COLLECTIONS.PURCHASES,
+            path: purchaseRef.path
+        });
+
+        // VERIFICACIÓN INMEDIATA
+        logger.info('🔎 VERIFICANDO ESCRITURA...');
+        const verificationDoc = await purchaseRef.get();
+        
+        if (!verificationDoc.exists) {
+            logger.error('❌ VERIFICACIÓN FALLIDA: Documento no existe después de guardar');
+            throw new Error('La compra no se pudo verificar en Firestore');
+        }
+
+        const savedData = verificationDoc.data();
+        logger.info('✅ VERIFICACIÓN EXITOSA:', {
+            purchaseId: purchaseRef.id,
+            exists: verificationDoc.exists,
+            savedItemName: savedData.itemName
+        });
+
+        // Preparar respuesta
+        const responseData = {
             id: purchaseRef.id,
-            ...purchaseData
-        }, 'Compra registrada exitosamente'));
+            ...purchaseData,
+            // Usar fechas reales para la respuesta
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        };
+
+        logger.info('📤 ENVIANDO RESPUESTA EXITOSA');
+        res.status(201).json(createResponse(true, responseData, 'Compra registrada exitosamente'));
 
     } catch (error) {
-        logger.error('Error registrando compra', error);
-        res.status(500).json(createResponse(false, null, 'Error al registrar compra', error.message));
+        logger.error('💥 ERROR CRÍTICO AL GUARDAR COMPRA:', {
+            error: error.message,
+            code: error.code,
+            stack: error.stack,
+            purchaseId: purchaseRef?.id,
+            collection: COLLECTIONS.PURCHASES
+        });
+
+        let errorMessage = 'Error al registrar compra';
+        let errorCode = 'PURCHASE_SAVE_ERROR';
+        let statusCode = 500;
+
+        if (error.code === 'permission-denied') {
+            errorMessage = 'Permisos insuficientes para guardar en Firestore';
+            errorCode = 'FIRESTORE_PERMISSION_DENIED';
+            statusCode = 403;
+        } else if (error.code === 'not-found') {
+            errorMessage = 'Colección no encontrada';
+            errorCode = 'COLLECTION_NOT_FOUND';
+            statusCode = 404;
+        }
+
+        res.status(statusCode).json(createResponse(false, null, errorMessage, {
+            code: errorCode,
+            details: error.message,
+            suggestion: 'Revisa los logs de Cloud Functions para más detalles'
+        }));
     }
 });
 
