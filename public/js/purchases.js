@@ -143,16 +143,25 @@ class PurchasesManager {
     
 
     
-    async handlePurchaseSubmit(formData) {
+    async handlePurchaseSubmit(formElement) {
     try {
-        console.log('📝 Datos del formulario de compra:', formData);
+        // ✅ EXTRAER DATOS del formulario
+        const formData = new FormData(formElement);
+        const data = Object.fromEntries(formData.entries());
+        
+        console.log('📝 Datos del formulario de compra:', data);
         
         // Asegurar que los campos numéricos sean números
         const purchaseData = {
-            ...formData,
-            quantity: parseFloat(formData.quantity),
-            unitCost: formData.unitCost ? parseFloat(formData.unitCost) : 0,
-            totalCost: parseFloat(formData.totalCost)
+            type: data.type,
+            itemName: data.itemName,
+            quantity: parseFloat(data.quantity) || 0,
+            unit: data.unit || 'unidad',
+            unitCost: data.unitCost ? parseFloat(data.unitCost) : 0,
+            totalCost: parseFloat(data.totalCost) || 0,
+            purchaseDate: data.purchaseDate,
+            supplier: data.supplier || '',
+            notes: data.notes || ''
         };
 
         console.log('📦 Enviando compra:', purchaseData);
@@ -164,17 +173,13 @@ class PurchasesManager {
         bootstrap.Modal.getInstance(document.getElementById('purchase-form-modal')).hide();
         await this.loadPurchases();
         
-        // ✅ CORREGIDO: Usar showAlert en lugar de showSuccess
         this.app.showAlert('Compra registrada exitosamente', 'success');
         
     } catch (error) {
         console.error('❌ Error registrando compra:', error);
-        // ✅ CORREGIDO: Usar showAlert en lugar de showError
         this.app.showAlert('Error al registrar compra: ' + error.message, 'danger');
     }
 }
-
-
     async deletePurchase(purchaseId) {
     if (!confirm('¿Estás seguro de que quieres eliminar esta compra?')) {
         return;
