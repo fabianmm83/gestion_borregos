@@ -27,44 +27,39 @@ class PurchasesManager {
     }
 
     async loadPurchases() {
-        try {
-            this.app.showLoading(true);
-            console.log('🔄 Cargando compras desde API...');
-            
-            const response = await this.app.apiCall('/purchases');
-            
-            // ✅ CORREGIDO: Manejar diferentes formatos de respuesta
-            let purchasesArray = [];
-            
-            if (Array.isArray(response)) {
-                purchasesArray = response;
-            } else if (response && Array.isArray(response.data)) {
-                purchasesArray = response.data;
-            } else if (response && Array.isArray(response.purchases)) {
-                purchasesArray = response.purchases;
-            } else {
-                console.warn('⚠️ Formato de respuesta inesperado para compras:', response);
-                purchasesArray = [];
-            }
-            
-            this.purchases = purchasesArray;
-            this.renderPurchases();
-            console.log(`✅ ${this.purchases.length} compras cargadas`);
-            
-        } catch (error) {
-            console.error('Error loading purchases:', error);
-            
-            if (error.message.includes('404')) {
-                // Si no existe el endpoint, mostrar estado vacío
-                this.renderPurchases([]);
-            } else {
-                this.app.showAlert('Error al cargar compras: ' + error.message, 'danger');
-                this.renderPurchases([]);
-            }
-        } finally {
-            this.app.showLoading(false);
+    try {
+        console.log('🔄 Cargando compras desde API...');
+        const response = await this.app.apiCall('/purchases');
+        
+        // MANEJO MEJORADO DE FORMATOS DE RESPUESTA
+        let purchases = [];
+        
+        if (Array.isArray(response)) {
+            // Formato: array directo
+            purchases = response;
+        } else if (response.purchases) {
+            // Formato: { purchases: [], pagination: {} }
+            purchases = response.purchases;
+        } else if (response.data && Array.isArray(response.data)) {
+            // Formato: { data: [], ... }
+            purchases = response.data;
+        } else if (response.data && response.data.purchases) {
+            // Formato: { data: { purchases: [], pagination: {} }, ... }
+            purchases = response.data.purchases;
+        } else {
+            console.warn('⚠️ Formato de respuesta inesperado para compras:', response);
+            purchases = [];
         }
+        
+        this.purchases = purchases;
+        console.log(`✅ ${purchases.length} compras cargadas`);
+        this.renderPurchases();
+        
+    } catch (error) {
+        console.error('Error loading purchases:', error);
+        this.app.showError('Error al cargar compras: ' + error.message);
     }
+}
 
     renderPurchases(purchases = this.purchases) {
         const container = document.getElementById('purchases-list');
