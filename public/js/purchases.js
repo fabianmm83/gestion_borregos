@@ -18,13 +18,13 @@ class PurchasesManager {
     }
 
     setupEventListeners() {
-        // ✅ CORREGIDO: Usar el método del app para conexión única
-        this.app.setupFormHandler('purchase-form', (form) => this.handlePurchaseSubmit(form));
+    // ✅ CORREGIDO: Usar handlePurchaseSubmit (sin "Form")
+    this.app.setupFormHandler('purchase-form', (form) => this.handlePurchaseSubmit(form));
 
-        document.addEventListener('purchasesViewLoaded', () => {
-            this.loadPurchases();
-        });
-    }
+    document.addEventListener('purchasesViewLoaded', () => {
+        this.loadPurchases();
+    });
+}
 
     async loadPurchases() {
     try {
@@ -140,7 +140,9 @@ class PurchasesManager {
         }
     }
 
-    async handlePurchaseFormSubmit(formData) {
+    
+
+    async handlePurchaseSubmit(formData) {
     try {
         console.log('📝 Datos del formulario de compra:', formData);
         
@@ -170,26 +172,24 @@ class PurchasesManager {
 }
 
     async deletePurchase(purchaseId) {
-        if (!confirm('¿Estás seguro de que quieres eliminar esta compra?')) {
-            return;
-        }
-
-        try {
-            this.app.showLoading(true);
-            await this.app.apiCall(`/purchases/${purchaseId}`, {
-                method: 'DELETE'
-            });
-            
-            this.app.showAlert('Compra eliminada exitosamente', 'success');
-            await this.loadPurchases();
-            
-        } catch (error) {
-            console.error('Error deleting purchase:', error);
-            this.app.showAlert('Error al eliminar compra: ' + error.message, 'danger');
-        } finally {
-            this.app.showLoading(false);
-        }
+    if (!confirm('¿Estás seguro de que quieres eliminar esta compra?')) {
+        return;
     }
+
+    try {
+        this.app.showLoading(true);
+        await this.app.apiCall(`/purchases/${purchaseId}`, 'DELETE');
+        
+        this.app.showSuccess('Compra eliminada exitosamente');
+        await this.loadPurchases();
+        
+    } catch (error) {
+        console.error('Error deleting purchase:', error);
+        this.app.showError('Error al eliminar compra: ' + error.message);
+    } finally {
+        this.app.showLoading(false);
+    }
+}
 
     getEmptyState() {
         return `
