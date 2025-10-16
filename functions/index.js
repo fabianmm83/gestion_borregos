@@ -907,49 +907,111 @@ app.post('/feeds', authenticate, async (req, res) => {
 
 // ==================== GESTIÓN DE INVENTARIO ====================
 
-// Obtener inventario
-app.get('/inventory', authenticate, async (req, res) => {
+
+// Obtener un item específico del inventario
+app.get('/inventory/:id', authenticate, async (req, res) => {
     try {
         const userId = req.user.uid;
-        const { page = 1, limit = 50, lowStock = false } = req.query;
+        const inventoryId = req.params.id;
 
-        let query = db.collection(COLLECTIONS.INVENTORY).where('userId', '==', userId);
-
-        const snapshot = await query.get();
-        let inventory = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data(),
-            lastUpdated: doc.data().lastUpdated?.toDate?.() || null,
-            createdAt: doc.data().createdAt?.toDate?.() || null
-        }));
-
-        // Filtrar por stock bajo si se solicita
-        if (lowStock === 'true') {
-            inventory = inventory.filter(item => item.currentStock <= item.minStock);
+        const inventoryDoc = await db.collection(COLLECTIONS.INVENTORY).doc(inventoryId).get();
+        
+        if (!inventoryDoc.exists) {
+            return res.status(404).json(
+                createResponse(false, null, 'Item de inventario no encontrado', 'INVENTORY_ITEM_NOT_FOUND')
+            );
         }
 
-        // Paginación
-        const startIndex = (page - 1) * limit;
-        const endIndex = startIndex + parseInt(limit);
-        const paginatedInventory = inventory.slice(startIndex, endIndex);
-
+        const inventoryData = inventoryDoc.data();
+        if (inventoryData.userId !== userId) {
+            return res.status(403).json(
+                createResponse(false, null, 'No tienes permisos para ver este item', 'PERMISSION_DENIED')
+            );
+        }
+        
         res.json(createResponse(true, {
-            inventory: paginatedInventory,
-            pagination: {
-                currentPage: parseInt(page),
-                totalPages: Math.ceil(inventory.length / limit),
-                totalItems: inventory.length,
-                hasNext: endIndex < inventory.length,
-                hasPrev: startIndex > 0
-            },
-            lowStockCount: inventory.filter(item => item.currentStock <= item.minStock).length
-        }, 'Inventario obtenido exitosamente'));
+            id: inventoryDoc.id,
+            ...inventoryData,
+            lastUpdated: inventoryData.lastUpdated?.toDate?.() || null,
+            createdAt: inventoryData.createdAt?.toDate?.() || null
+        }, 'Item de inventario obtenido exitosamente'));
 
     } catch (error) {
-        logger.error('Error obteniendo inventario', error);
-        res.status(500).json(createResponse(false, null, 'Error al obtener inventario', error.message));
+        logger.error('Error obteniendo item de inventario:', error);
+        res.status(500).json(createResponse(false, null, 'Error al obtener item de inventario', error.message));
     }
 });
+
+// Actualizar item completo del inventario
+app.put('/inventory/:id', authenticate, async (req, res) => {
+    try {
+        const userId = req.user.uid;
+        const inventoryId = req.params.id;
+        
+        const inventoryDoc = await db.collection(COLLECTIONS.INVENTORY).doc(inventoryId).get();
+        if (!inventoryDoc.exists) {
+            return res.status(404).json(
+                createResponse(false, null, 'Item de inventario no encontrado', 'INVENTORY_ITEM_NOT_FOUND')
+            );
+        }
+
+        const inventoryData = inventoryDoc.data();
+        if (inventoryData.userId !== userId) {
+            return res.status(403).json(
+                createResponse(false, null, 'No tienes permisos para editar este item', 'PERMISSION_DENIED')
+            );
+        }
+
+        const updateData = {
+            ...req.body,
+            lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+        };
+
+        await db.collection(COLLECTIONS.INVENTORY).doc(inventoryId).update(updateData);
+        logger.info('Item de inventario actualizado exitosamente', { inventoryId });
+        
+        res.json(createResponse(true, {
+            id: inventoryId,
+            ...updateData
+        }, 'Item de inventario actualizado exitosamente'));
+
+    } catch (error) {
+        logger.error('Error actualizando item de inventario:', error);
+        res.status(500).json(createResponse(false, null, 'Error al actualizar item de inventario', error.message));
+    }
+});
+
+// Eliminar item del inventario
+app.delete('/inventory/:id', authenticate, async (req, res) => {
+    try {
+        const userId = req.user.uid;
+        const inventoryId = req.params.id;
+        
+        const inventoryDoc = await db.collection(COLLECTIONS.INVENTORY).doc(inventoryId).get();
+        if (!inventoryDoc.exists) {
+            return res.status(404).json(
+                createResponse(false, null, 'Item de inventario no encontrado', 'INVENTORY_ITEM_NOT_FOUND')
+            );
+        }
+
+        const inventoryData = inventoryDoc.data();
+        if (inventoryData.userId !== userId) {
+            return res.status(403).json(
+                createResponse(false, null, 'No tienes permisos para eliminar este item', 'PERMISSION_DENIED')
+            );
+        }
+
+        await db.collection(COLLECTIONS.INVENTORY).doc(inventoryId).delete();
+        logger.info('Item de inventario eliminado exitosamente', { inventoryId });
+        
+        res.json(createResponse(true, null, 'Item eliminado del inventario exitosamente'));
+
+    } catch (error) {
+        logger.error('Error eliminando item de inventario:', error);
+        res.status(500).json(createResponse(false, null, 'Error al eliminar item del inventario', error.message));
+    }
+});
+
 
 // Agregar item al inventario
 app.post('/inventory', authenticate, async (req, res) => {

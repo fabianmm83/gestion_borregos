@@ -2,7 +2,6 @@ class InventoryManager {
     constructor(app) {
         this.app = app;
         this.currentEditId = null;
-        this.currentStockUpdateId = null;
         this.init();
     }
 
@@ -16,17 +15,6 @@ class InventoryManager {
         if (inventoryForm) {
             inventoryForm.addEventListener('submit', (e) => this.handleInventorySubmit(e));
         }
-
-        const stockUpdateForm = document.getElementById('stock-update-form');
-        if (stockUpdateForm) {
-            stockUpdateForm.addEventListener('submit', (e) => this.handleStockUpdate(e));
-        }
-
-        // Filtros
-        const typeFilter = document.getElementById('inventory-type-filter');
-        if (typeFilter) {
-            typeFilter.addEventListener('change', () => this.filterInventory());
-        }
     }
 
     async loadInventory() {
@@ -35,7 +23,6 @@ class InventoryManager {
             console.log('🔄 Cargando inventario desde API...');
             
             const response = await this.app.apiCall('/inventory');
-            // CORRECCIÓN: La respuesta viene en response.data.inventory
             const inventory = response.data?.inventory || [];
             console.log('✅ Inventario cargado:', inventory);
             this.renderInventory(inventory);
@@ -131,7 +118,7 @@ class InventoryManager {
                                 ` : ''}
                                 ${item.notes ? `
                                     <p class="card-text">
-                                        <strong>Descripción:</strong> ${item.notes}
+                                        <strong>Descripcion:</strong> ${item.notes}
                                     </p>
                                 ` : ''}
                             </div>
@@ -140,9 +127,6 @@ class InventoryManager {
                                     <span class="badge ${stockClass}">${stockText}</span>
                                 </div>
                                 <div class="btn-group-vertical">
-                                    <button class="btn btn-sm btn-outline-success adjust-stock-btn" data-id="${item.id}">
-                                        <i class="fas fa-edit"></i> Ajustar Stock
-                                    </button>
                                     <button class="btn btn-sm btn-outline-primary edit-inventory-btn" data-id="${item.id}">
                                         <i class="fas fa-edit"></i> Editar
                                     </button>
@@ -171,12 +155,6 @@ class InventoryManager {
         document.querySelectorAll('.delete-inventory-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 this.deleteInventory(e.target.closest('button').dataset.id);
-            });
-        });
-
-        document.querySelectorAll('.adjust-stock-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                this.showStockUpdate(e.target.closest('button').dataset.id);
             });
         });
     }
@@ -222,7 +200,7 @@ class InventoryManager {
             // Preparar datos para la API
             const inventoryData = {
                 itemName: data.itemName,
-                category: data.item_type, // Usar item_type como category
+                category: data.item_type,
                 currentStock: parseInt(data.currentStock),
                 minStock: parseInt(data.minStock),
                 unit: data.unit || 'unidad',
@@ -235,13 +213,13 @@ class InventoryManager {
 
             let result;
             if (this.currentEditId && this.currentEditId !== 'null') {
-                // Editar item existente
+                // ✅ EDITAR: Usar PUT para actualizar el item completo
                 result = await this.app.apiCall(`/inventory/${this.currentEditId}`, {
                     method: 'PUT',
                     body: inventoryData
                 });
             } else {
-                // Crear nuevo item
+                // ✅ CREAR: Usar POST para nuevo item
                 result = await this.app.apiCall('/inventory', {
                     method: 'POST',
                     body: inventoryData
@@ -276,7 +254,15 @@ class InventoryManager {
             this.app.showLoading(true);
             console.log('✏️ Editando item:', itemId);
             
-            const item = await this.app.apiCall(`/inventory/${itemId}`);
+            // ✅ CORREGIDO: Usar el endpoint GET individual
+            const response = await this.app.apiCall(`/inventory/${itemId}`);
+            const item = response.data;
+            
+            if (!item) {
+                this.app.showAlert('Item no encontrado en el inventario', 'warning');
+                return;
+            }
+
             console.log('📋 Item cargado:', item);
             
             // Poblar formulario
@@ -324,6 +310,7 @@ class InventoryManager {
         try {
             this.app.showLoading(true);
             
+            // ✅ ELIMINACIÓN REAL: Usar el endpoint DELETE
             await this.app.apiCall(`/inventory/${itemId}`, {
                 method: 'DELETE'
             });
@@ -334,82 +321,6 @@ class InventoryManager {
         } catch (error) {
             console.error('Error deleting inventory item:', error);
             this.app.showAlert('Error al eliminar el item: ' + error.message, 'danger');
-        } finally {
-            this.app.showLoading(false);
-        }
-    }
-
-    async showStockUpdate(itemId) {
-        try {
-            this.app.showLoading(true);
-            
-            const item = await this.app.apiCall(`/inventory/${itemId}`);
-            
-            // Configurar modal
-            document.getElementById('update-current-stock').value = item.currentStock;
-            document.getElementById('update-item-name').textContent = item.itemName;
-            this.currentStockUpdateId = itemId;
-            
-            const modal = new bootstrap.Modal(document.getElementById('stock-update-modal'));
-            modal.show();
-
-        } catch (error) {
-            console.error('Error loading item for stock update:', error);
-            this.app.showAlert('Error al cargar el item: ' + error.message, 'danger');
-        } finally {
-            this.app.showLoading(false);
-        }
-    }
-
-    async handleStockUpdate(e) {
-        e.preventDefault();
-        const form = e.target;
-        
-        try {
-            this.app.showLoading(true);
-            const formData = new FormData(form);
-            const data = Object.fromEntries(formData);
-
-            const currentStock = parseInt(document.getElementById('update-current-stock').value);
-            const quantity = parseInt(data.quantity);
-            let newStock = currentStock;
-
-            switch (data.operation) {
-                case 'add':
-                    newStock = currentStock + quantity;
-                    break;
-                case 'subtract':
-                    newStock = currentStock - quantity;
-                    if (newStock < 0) {
-                        this.app.showAlert('No se puede tener stock negativo', 'warning');
-                        return;
-                    }
-                    break;
-                case 'set':
-                    newStock = quantity;
-                    break;
-            }
-
-            // Actualizar stock
-            await this.app.apiCall(`/inventory/${this.currentStockUpdateId}/stock`, {
-                method: 'PUT',
-                body: {
-                    operation: data.operation,
-                    quantity: quantity,
-                    newStock: newStock
-                }
-            });
-            
-            this.app.showAlert('Stock actualizado exitosamente', 'success');
-            
-            const modal = bootstrap.Modal.getInstance(document.getElementById('stock-update-modal'));
-            modal.hide();
-            form.reset();
-            await this.loadInventory();
-
-        } catch (error) {
-            console.error('Error updating stock:', error);
-            this.app.showAlert('Error al actualizar el stock: ' + error.message, 'danger');
         } finally {
             this.app.showLoading(false);
         }
