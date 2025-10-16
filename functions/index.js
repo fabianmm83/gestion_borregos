@@ -1,7 +1,16 @@
-const functions = require('firebase-functions');
+const { onRequest } = require('firebase-functions/v2/https');
+const { setGlobalOptions } = require('firebase-functions/v2');
 const admin = require('firebase-admin');
 const express = require('express');
 const cors = require('cors');
+
+// Configurar opciones globales para Gen 2
+setGlobalOptions({
+  region: 'us-central1',
+  maxInstances: 10,
+  memory: '256MiB',
+  timeoutSeconds: 60
+});
 
 // Inicializar Firebase Admin
 admin.initializeApp();
@@ -1091,7 +1100,11 @@ app.use('*', (req, res) => {
     }));
 });
 
-// ==================== EXPORTACIÓN ====================
+// ==================== EXPORTACIÓN PARA GEN 2 ====================
 
-// Exportación simplificada para compatibilidad
-exports.api = functions.https.onRequest(app);
+// Exportar como Cloud Functions Gen 2
+exports.api = onRequest({
+  cors: true,
+  memory: '256MiB',
+  timeoutSeconds: 60
+}, app);
