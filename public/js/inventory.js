@@ -62,88 +62,89 @@ class InventoryManager {
     }
 
     renderInventory(inventory) {
-        const container = document.getElementById('inventory-list');
-        if (!container) return;
+    const container = document.getElementById('inventory-list');
+    if (!container) return;
 
-        if (!inventory || inventory.length === 0) {
-            container.innerHTML = `
-                <div class="alert alert-info">
-                    <i class="fas fa-info-circle me-2"></i>
-                    No hay items en el inventario.
-                    <button class="btn btn-primary btn-sm ms-2" onclick="inventoryManager.showInventoryForm()">
-                        <i class="fas fa-plus me-1"></i>Agregar Primer Item
-                    </button>
-                </div>
-            `;
-            return;
-        }
+    if (!inventory || inventory.length === 0) {
+        container.innerHTML = `
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle me-2"></i>
+                No hay items en el inventario.
+                <button class="btn btn-primary btn-sm ms-2" onclick="inventoryManager.showInventoryForm()">
+                    <i class="fas fa-plus me-1"></i>Agregar Primer Item
+                </button>
+            </div>
+        `;
+        return;
+    }
 
-        container.innerHTML = inventory.map(item => {
-            const isLowStock = item.currentStock <= item.minStock;
-            const stockClass = isLowStock ? 'bg-danger' : 'bg-success';
-            const stockText = isLowStock ? 'Stock Bajo' : 'Stock OK';
-            const itemTypeText = this.getItemTypeText(item.category);
+    container.innerHTML = inventory.map(item => {
+        const isLowStock = item.currentStock <= item.minStock;
+        const stockClass = isLowStock ? 'bg-danger' : 'bg-success';
+        const stockText = isLowStock ? 'Stock Bajo' : 'Stock OK';
+        const itemTypeText = this.getItemTypeText(item.category);
 
-            return `
-                <div class="card mb-3 ${isLowStock ? 'border-warning' : ''}">
-                    <div class="card-body">
-                        <div class="row">
-                            <div class="col-md-8">
-                                <h5 class="card-title">
-                                    <i class="${this.getItemTypeIcon(item.category)} me-2"></i>
-                                    ${this.escapeHtml(item.itemName)}
-                                </h5>
+        return `
+            <div class="card mb-3 ${isLowStock ? 'border-warning' : ''}" data-id="${item.id}"> <!-- ✅ AGREGAR data-id AQUÍ -->
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <h5 class="card-title">
+                                <i class="${this.getItemTypeIcon(item.category)} me-2"></i>
+                                ${this.escapeHtml(item.itemName)}
+                            </h5>
+                            <p class="card-text mb-1">
+                                <strong>Tipo:</strong> 
+                                <span class="badge bg-secondary">${itemTypeText}</span>
+                            </p>
+                            <p class="card-text mb-1">
+                                <strong>Stock:</strong> 
+                                <span class="badge ${stockClass}">${item.currentStock} ${item.unit}</span>
+                                ${isLowStock ? '<i class="fas fa-exclamation-triangle text-warning ms-1"></i>' : ''}
+                            </p>
+                            <p class="card-text mb-1">
+                                <strong>Stock Mínimo:</strong> ${item.minStock} ${item.unit}
+                            </p>
+                            <p class="card-text mb-1">
+                                <strong>Precio:</strong> $${parseFloat(item.price || 0).toLocaleString()}
+                            </p>
+                            <p class="card-text mb-1">
+                                <strong>Proveedor:</strong> ${this.escapeHtml(item.supplier || 'N/A')}
+                            </p>
+                            ${item.expiration_date ? `
                                 <p class="card-text mb-1">
-                                    <strong>Tipo:</strong> 
-                                    <span class="badge bg-secondary">${itemTypeText}</span>
+                                    <strong>Caducidad:</strong> ${new Date(item.expiration_date).toLocaleDateString()}
                                 </p>
-                                <p class="card-text mb-1">
-                                    <strong>Stock:</strong> 
-                                    <span class="badge ${stockClass}">${item.currentStock} ${item.unit}</span>
-                                    ${isLowStock ? '<i class="fas fa-exclamation-triangle text-warning ms-1"></i>' : ''}
+                            ` : ''}
+                            ${item.notes ? `
+                                <p class="card-text">
+                                    <strong>Descripcion:</strong> ${item.notes}
                                 </p>
-                                <p class="card-text mb-1">
-                                    <strong>Stock Mínimo:</strong> ${item.minStock} ${item.unit}
-                                </p>
-                                <p class="card-text mb-1">
-                                    <strong>Precio:</strong> $${parseFloat(item.price || 0).toLocaleString()}
-                                </p>
-                                <p class="card-text mb-1">
-                                    <strong>Proveedor:</strong> ${this.escapeHtml(item.supplier || 'N/A')}
-                                </p>
-                                ${item.expiration_date ? `
-                                    <p class="card-text mb-1">
-                                        <strong>Caducidad:</strong> ${new Date(item.expiration_date).toLocaleDateString()}
-                                    </p>
-                                ` : ''}
-                                ${item.notes ? `
-                                    <p class="card-text">
-                                        <strong>Descripcion:</strong> ${item.notes}
-                                    </p>
-                                ` : ''}
+                            ` : ''}
+                        </div>
+                        <div class="col-md-4 text-end">
+                            <div class="mb-2">
+                                <span class="badge ${stockClass}">${stockText}</span>
                             </div>
-                            <div class="col-md-4 text-end">
-                                <div class="mb-2">
-                                    <span class="badge ${stockClass}">${stockText}</span>
-                                </div>
-                                <div class="btn-group-vertical">
-                                    <button class="btn btn-sm btn-outline-primary edit-inventory-btn" data-id="${item.id}">
-                                        <i class="fas fa-edit"></i> Editar
-                                    </button>
-                                    <button class="btn btn-sm btn-outline-danger delete-inventory-btn" data-id="${item.id}">
-                                        <i class="fas fa-trash"></i> Eliminar
-                                    </button>
-                                </div>
+                            <div class="btn-group-vertical">
+                                <button class="btn btn-sm btn-outline-primary edit-inventory-btn" data-id="${item.id}">
+                                    <i class="fas fa-edit"></i> Editar
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger delete-inventory-btn" data-id="${item.id}">
+                                    <i class="fas fa-trash"></i> Eliminar
+                                </button>
                             </div>
                         </div>
                     </div>
                 </div>
-            `;
-        }).join('');
+            </div>
+        `;
+    }).join('');
 
-        // Agregar event listeners
-        this.attachInventoryEventListeners();
-    }
+    // Agregar event listeners
+    this.attachInventoryEventListeners();
+}
+
 
     attachInventoryEventListeners() {
         document.querySelectorAll('.edit-inventory-btn').forEach(btn => {
@@ -176,78 +177,218 @@ class InventoryManager {
     }
 
     async handleInventorySubmit(e) {
-        e.preventDefault();
-        const form = e.target;
-        
-        try {
-            this.app.showLoading(true);
-            const formData = new FormData(form);
-            const data = Object.fromEntries(formData);
+    e.preventDefault();
+    const form = e.target;
+    
+    try {
+        this.app.showLoading(true);
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData);
 
-            console.log('📝 Datos del formulario de inventario:', data);
+        console.log('📝 Datos del formulario de inventario:', data);
 
-            // Validaciones
-            if (!data.item_type || !data.itemName || !data.currentStock || !data.minStock) {
-                this.app.showAlert('Todos los campos obligatorios deben ser completados', 'warning');
-                return;
-            }
-
-            if (parseInt(data.currentStock) < 0 || parseInt(data.minStock) < 0) {
-                this.app.showAlert('Los valores de stock no pueden ser negativos', 'warning');
-                return;
-            }
-
-            // Preparar datos para la API
-            const inventoryData = {
-                itemName: data.itemName,
-                category: data.item_type,
-                currentStock: parseInt(data.currentStock),
-                minStock: parseInt(data.minStock),
-                unit: data.unit || 'unidad',
-                price: data.price ? parseFloat(data.price) : 0,
-                supplier: data.supplier || '',
-                notes: data.notes || ''
-            };
-
-            console.log('🚀 Enviando a API:', inventoryData);
-
-            let result;
-            if (this.currentEditId && this.currentEditId !== 'null') {
-                // ✅ EDITAR: Usar PUT para actualizar el item completo
-                result = await this.app.apiCall(`/inventory/${this.currentEditId}`, {
-                    method: 'PUT',
-                    body: inventoryData
-                });
-            } else {
-                // ✅ CREAR: Usar POST para nuevo item
-                result = await this.app.apiCall('/inventory', {
-                    method: 'POST',
-                    body: inventoryData
-                });
-            }
-
-            console.log('✅ Respuesta de API:', result);
-
-            this.app.showAlert(
-                this.currentEditId ? 'Item actualizado exitosamente' : 'Item agregado al inventario exitosamente', 
-                'success'
-            );
-            
-            // Cerrar modal y recargar
-            const modal = bootstrap.Modal.getInstance(document.getElementById('inventory-form-modal'));
-            modal.hide();
-            form.reset();
-            this.currentEditId = null;
-            
-            await this.loadInventory();
-
-        } catch (error) {
-            console.error('❌ Error saving inventory item:', error);
-            this.app.showAlert('Error al guardar el item: ' + error.message, 'danger');
-        } finally {
-            this.app.showLoading(false);
+        // Validaciones
+        if (!data.item_type || !data.itemName || !data.currentStock || !data.minStock) {
+            this.app.showAlert('Todos los campos obligatorios deben ser completados', 'warning');
+            return;
         }
+
+        if (parseInt(data.currentStock) < 0 || parseInt(data.minStock) < 0) {
+            this.app.showAlert('Los valores de stock no pueden ser negativos', 'warning');
+            return;
+        }
+
+        // Preparar datos para la API
+        const inventoryData = {
+            itemName: data.itemName,
+            category: data.item_type,
+            currentStock: parseInt(data.currentStock),
+            minStock: parseInt(data.minStock),
+            unit: data.unit || 'unidad',
+            price: data.price ? parseFloat(data.price) : 0,
+            supplier: data.supplier || '',
+            notes: data.notes || ''
+        };
+
+        console.log('🚀 Enviando a API:', inventoryData);
+
+        let result;
+        if (this.currentEditId && this.currentEditId !== 'null') {
+            // ✅ EDITAR: Usar PUT para actualizar el item completo
+            result = await this.app.apiCall(`/inventory/${this.currentEditId}`, {
+                method: 'PUT',
+                body: inventoryData
+            });
+            
+            // ✅ AGREGAR: Actualizar localmente sin recargar toda la lista
+            this.updateLocalItem(this.currentEditId, inventoryData);
+        } else {
+            // ✅ CREAR: Usar POST para nuevo item
+            result = await this.app.apiCall('/inventory', {
+                method: 'POST',
+                body: inventoryData
+            });
+            
+            // ✅ AGREGAR: Agregar localmente sin recargar toda la lista
+            this.addLocalItem(result.data);
+        }
+
+        console.log('✅ Respuesta de API:', result);
+
+        this.app.showAlert(
+            this.currentEditId ? 'Item actualizado exitosamente' : 'Item agregado al inventario exitosamente', 
+            'success'
+        );
+        
+        // ✅ CORREGIDO: Cerrar modal inmediatamente
+        const modal = bootstrap.Modal.getInstance(document.getElementById('inventory-form-modal'));
+        if (modal) {
+            modal.hide();
+        }
+        form.reset();
+        this.currentEditId = null;
+
+        // ✅ CORREGIDO: No llamar loadInventory() aquí - ya actualizamos localmente
+        // await this.loadInventory(); // ❌ ESTO CAUSA LA SEGUNDA LLAMADA
+
+    } catch (error) {
+        console.error('❌ Error saving inventory item:', error);
+        this.app.showAlert('Error al guardar el item: ' + error.message, 'danger');
+    } finally {
+        this.app.showLoading(false);
     }
+}
+
+// ✅ NUEVO MÉTODO: Actualizar item localmente
+updateLocalItem(itemId, newData) {
+    const container = document.getElementById('inventory-list');
+    if (!container) return;
+
+    const itemCard = container.querySelector(`[data-id="${itemId}"]`);
+    if (itemCard) {
+        // Actualizar la tarjeta existente con los nuevos datos
+        const itemNameElement = itemCard.querySelector('.card-title');
+        const stockElement = itemCard.querySelector('.badge');
+        const minStockElement = itemCard.querySelector('p:nth-child(3)'); // Ajusta según tu estructura
+        
+        if (itemNameElement) {
+            const icon = itemNameElement.querySelector('i').outerHTML;
+            itemNameElement.innerHTML = `${icon} ${this.escapeHtml(newData.itemName)}`;
+        }
+        
+        if (stockElement) {
+            const isLowStock = newData.currentStock <= newData.minStock;
+            const stockClass = isLowStock ? 'bg-danger' : 'bg-success';
+            stockElement.className = `badge ${stockClass}`;
+            stockElement.textContent = `${newData.currentStock} ${newData.unit}`;
+        }
+        
+        // Actualizar otros campos según sea necesario
+        console.log('✅ Item actualizado localmente:', itemId);
+    }
+}
+
+// ✅ NUEVO MÉTODO: Agregar item localmente
+addLocalItem(newItem) {
+    const container = document.getElementById('inventory-list');
+    if (!container) return;
+
+    // Si el container está vacío, limpiar el mensaje de "no hay items"
+    if (container.querySelector('.alert-info')) {
+        container.innerHTML = '';
+    }
+
+    const isLowStock = newItem.currentStock <= newItem.minStock;
+    const stockClass = isLowStock ? 'bg-danger' : 'bg-success';
+    const stockText = isLowStock ? 'Stock Bajo' : 'Stock OK';
+    const itemTypeText = this.getItemTypeText(newItem.category);
+
+    const newItemHTML = `
+        <div class="card mb-3 ${isLowStock ? 'border-warning' : ''}" data-id="${newItem.id}">
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-8">
+                        <h5 class="card-title">
+                            <i class="${this.getItemTypeIcon(newItem.category)} me-2"></i>
+                            ${this.escapeHtml(newItem.itemName)}
+                        </h5>
+                        <p class="card-text mb-1">
+                            <strong>Tipo:</strong> 
+                            <span class="badge bg-secondary">${itemTypeText}</span>
+                        </p>
+                        <p class="card-text mb-1">
+                            <strong>Stock:</strong> 
+                            <span class="badge ${stockClass}">${newItem.currentStock} ${newItem.unit}</span>
+                            ${isLowStock ? '<i class="fas fa-exclamation-triangle text-warning ms-1"></i>' : ''}
+                        </p>
+                        <p class="card-text mb-1">
+                            <strong>Stock Mínimo:</strong> ${newItem.minStock} ${newItem.unit}
+                        </p>
+                        <p class="card-text mb-1">
+                            <strong>Precio:</strong> $${parseFloat(newItem.price || 0).toLocaleString()}
+                        </p>
+                        <p class="card-text mb-1">
+                            <strong>Proveedor:</strong> ${this.escapeHtml(newItem.supplier || 'N/A')}
+                        </p>
+                        ${newItem.notes ? `
+                            <p class="card-text">
+                                <strong>Descripcion:</strong> ${newItem.notes}
+                            </p>
+                        ` : ''}
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <div class="mb-2">
+                            <span class="badge ${stockClass}">${stockText}</span>
+                        </div>
+                        <div class="btn-group-vertical">
+                            <button class="btn btn-sm btn-outline-primary edit-inventory-btn" data-id="${newItem.id}">
+                                <i class="fas fa-edit"></i> Editar
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger delete-inventory-btn" data-id="${newItem.id}">
+                                <i class="fas fa-trash"></i> Eliminar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // Agregar el nuevo item al principio de la lista
+    container.insertAdjacentHTML('afterbegin', newItemHTML);
+    
+    // Re-attach event listeners
+    this.attachInventoryEventListeners();
+    
+    // Actualizar estadísticas
+    this.updateStatsAfterChange();
+    
+    console.log('✅ Item agregado localmente:', newItem.id);
+}
+
+// ✅ NUEVO MÉTODO: Actualizar estadísticas después de cambios
+updateStatsAfterChange() {
+    const container = document.getElementById('inventory-list');
+    if (!container) return;
+
+    const items = container.querySelectorAll('.card');
+    const totalItems = items.length;
+    const lowStockItems = Array.from(items).filter(item => {
+        const stockText = item.querySelector('.badge:not(.bg-secondary)').textContent;
+        const currentStock = parseInt(stockText.split(' ')[0]);
+        const minStockText = item.querySelector('p:nth-child(3)').textContent;
+        const minStock = parseInt(minStockText.split(':')[1].trim().split(' ')[0]);
+        return currentStock <= minStock;
+    }).length;
+
+    const totalInventory = document.getElementById('total-inventory');
+    const lowStockItemsElement = document.getElementById('low-stock-items');
+    const inventoryLowStock = document.getElementById('inventory-low-stock');
+
+    if (totalInventory) totalInventory.textContent = totalItems;
+    if (lowStockItemsElement) lowStockItemsElement.textContent = lowStockItems;
+    if (inventoryLowStock) inventoryLowStock.textContent = lowStockItems;
+}
 
     async editInventory(itemId) {
         try {
