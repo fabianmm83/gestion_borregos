@@ -17,6 +17,25 @@ class AnimalsManager {
         }
     }
 
+    // Método para previsualizar foto
+    previewPhoto(event) {
+        const input = event.target;
+        const preview = document.getElementById('animal-photo-preview');
+        
+        if (input.files && input.files[0]) {
+            const reader = new FileReader();
+            
+            reader.onload = function(e) {
+                preview.src = e.target.result;
+                preview.style.display = 'block';
+            };
+            
+            reader.readAsDataURL(input.files[0]);
+        } else {
+            preview.style.display = 'none';
+        }
+    }
+
     async loadAnimals() {
         try {
             this.app.showLoading(true);
@@ -53,7 +72,8 @@ class AnimalsManager {
                 gender: "male",
                 birthDate: "2023-05-15",
                 status: "active",
-                notes: "Animal de demostración"
+                notes: "Animal de demostración",
+                photoUrl: null
             }
         ];
     }
@@ -80,31 +100,41 @@ class AnimalsManager {
                 <div class="card-body">
                     <div class="row">
                         <div class="col-md-8">
-                            <h5 class="card-title">
-                                <i class="fas fa-sheep me-2"></i>${this.escapeHtml(animal.name)}
-                            </h5>
-                            <p class="card-text mb-1">
-                                <strong>Arete:</strong> ${this.escapeHtml(animal.earTag)}
-                            </p>
-                            <p class="card-text mb-1">
-                                <strong>Raza:</strong> ${this.escapeHtml(animal.breed)}
-                            </p>
-                            <p class="card-text mb-1">
-                                <strong>Peso:</strong> ${animal.weight} kg
-                            </p>
-                            <p class="card-text mb-1">
-                                <strong>Género:</strong> ${this.getGenderText(animal.gender)}
-                            </p>
-                            ${animal.birthDate ? `
-                                <p class="card-text mb-1">
-                                    <strong>Nacimiento:</strong> ${new Date(animal.birthDate).toLocaleDateString()}
-                                </p>
-                            ` : ''}
-                            ${animal.notes ? `
-                                <p class="card-text">
-                                    <strong>Notas:</strong> ${animal.notes}
-                                </p>
-                            ` : ''}
+                            <div class="d-flex align-items-start">
+                                ${animal.photoUrl ? `
+                                    <div class="me-3">
+                                        <img src="${animal.photoUrl}" alt="${this.escapeHtml(animal.name)}" 
+                                             class="animal-photo-preview" style="max-width: 100px;">
+                                    </div>
+                                ` : ''}
+                                <div>
+                                    <h5 class="card-title">
+                                        <i class="fas fa-sheep me-2"></i>${this.escapeHtml(animal.name)}
+                                    </h5>
+                                    <p class="card-text mb-1">
+                                        <strong>Arete:</strong> ${this.escapeHtml(animal.earTag)}
+                                    </p>
+                                    <p class="card-text mb-1">
+                                        <strong>Raza:</strong> ${this.escapeHtml(animal.breed)}
+                                    </p>
+                                    <p class="card-text mb-1">
+                                        <strong>Peso:</strong> ${animal.weight} kg
+                                    </p>
+                                    <p class="card-text mb-1">
+                                        <strong>Género:</strong> ${this.getGenderText(animal.gender)}
+                                    </p>
+                                    ${animal.birthDate ? `
+                                        <p class="card-text mb-1">
+                                            <strong>Nacimiento:</strong> ${new Date(animal.birthDate).toLocaleDateString()}
+                                        </p>
+                                    ` : ''}
+                                    ${animal.notes ? `
+                                        <p class="card-text">
+                                            <strong>Notas:</strong> ${animal.notes}
+                                        </p>
+                                    ` : ''}
+                                </div>
+                            </div>
                         </div>
                         <div class="col-md-4 text-end">
                             <span class="badge ${this.getStatusBadge(animal.status)}">
@@ -170,6 +200,15 @@ class AnimalsManager {
                 status: 'active'
             };
 
+            // Manejar foto si existe
+            const photoInput = form.querySelector('#animal-photo');
+            if (photoInput && photoInput.files[0]) {
+                console.log('📸 Foto seleccionada:', photoInput.files[0]);
+                // Aquí puedes implementar la subida de la foto
+                // Por ahora, solo mostramos un mensaje
+                this.app.showAlert('Foto seleccionada (función de subida en desarrollo)', 'info');
+            }
+
             console.log('🚀 Enviando a API:', animalData);
 
             let result;
@@ -197,7 +236,7 @@ class AnimalsManager {
             // Cerrar modal y recargar
             const modal = bootstrap.Modal.getInstance(document.getElementById('animal-form-modal'));
             modal.hide();
-            form.reset();
+            this.resetAnimalForm();
             this.currentEditId = null;
             
             await this.loadAnimals();
@@ -208,6 +247,12 @@ class AnimalsManager {
         } finally {
             this.app.showLoading(false);
         }
+    }
+
+    resetAnimalForm() {
+        const form = document.getElementById('animal-form');
+        form.reset();
+        document.getElementById('animal-photo-preview').style.display = 'none';
     }
 
     async editAnimal(animalId) {
@@ -228,6 +273,15 @@ class AnimalsManager {
                     input.value = animal[field];
                 }
             });
+            
+            // Manejar foto si existe
+            const preview = document.getElementById('animal-photo-preview');
+            if (animal.photoUrl) {
+                preview.src = animal.photoUrl;
+                preview.style.display = 'block';
+            } else {
+                preview.style.display = 'none';
+            }
             
             this.currentEditId = animalId;
             
@@ -291,8 +345,7 @@ class AnimalsManager {
 
     showAnimalForm() {
         this.currentEditId = null;
-        const form = document.getElementById('animal-form');
-        form.reset();
+        this.resetAnimalForm();
         
         // Restaurar título del modal
         const modalTitle = document.querySelector('#animal-form-modal .modal-title');

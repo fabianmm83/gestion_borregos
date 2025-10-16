@@ -5,6 +5,7 @@ class App {
         this.FIREBASE_API_KEY = 'AIzaSyC7XrvX6AOAUP7dhd6yR4xIO0aqRwGe5nk';
         this.currentView = 'dashboard';
         this.currentUser = null;
+        this.deferredPrompt = null;
         this.init();
     }
 
@@ -12,9 +13,58 @@ class App {
         console.log('🚀 App inicializando...');
         this.createLoadingElement();
         this.setupEventListeners();
+        this.setupPWA();
         
         // Verificar autenticación al iniciar
         this.checkAuthAndLoad();
+    }
+
+    // ==================== PWA ====================
+
+    setupPWA() {
+        // Registrar service worker
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('./sw.js')
+                .then(registration => console.log('✅ Service Worker registrado'))
+                .catch(error => console.log('❌ Service Worker registration failed:', error));
+        }
+
+        // Manejar instalación de PWA
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            this.deferredPrompt = e;
+            this.showInstallPrompt();
+        });
+
+        // Detectar si la app está instalada
+        window.addEventListener('appinstalled', () => {
+            console.log('✅ PWA instalada');
+            this.deferredPrompt = null;
+            document.getElementById('pwa-install-prompt').style.display = 'none';
+        });
+    }
+
+    showInstallPrompt() {
+        const prompt = document.getElementById('pwa-install-prompt');
+        if (prompt && this.deferredPrompt) {
+            prompt.style.display = 'block';
+        }
+    }
+
+    installPWA() {
+        if (this.deferredPrompt) {
+            this.deferredPrompt.prompt();
+            this.deferredPrompt.userChoice.then((choiceResult) => {
+                if (choiceResult.outcome === 'accepted') {
+                    console.log('✅ Usuario aceptó instalar la PWA');
+                    this.showAlert('¡App instalada correctamente!', 'success');
+                } else {
+                    console.log('❌ Usuario rechazó instalar la PWA');
+                }
+                this.deferredPrompt = null;
+                document.getElementById('pwa-install-prompt').style.display = 'none';
+            });
+        }
     }
 
     // ==================== AUTENTICACIÓN ====================
@@ -367,6 +417,16 @@ class App {
             case 'inventory':
                 if (window.inventoryManager) {
                     window.inventoryManager.loadInventory();
+                }
+                break;
+            case 'purchases':
+                if (window.purchasesManager) {
+                    window.purchasesManager.loadPurchases();
+                }
+                break;
+            case 'reports':
+                if (window.reportsManager) {
+                    window.reportsManager.generateReports();
                 }
                 break;
         }
