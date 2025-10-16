@@ -142,6 +142,7 @@ class PurchasesManager {
 
     
 
+    
     async handlePurchaseSubmit(formData) {
     try {
         console.log('📝 Datos del formulario de compra:', formData);
@@ -163,13 +164,16 @@ class PurchasesManager {
         bootstrap.Modal.getInstance(document.getElementById('purchase-form-modal')).hide();
         await this.loadPurchases();
         
-        this.app.showSuccess('Compra registrada exitosamente');
+        // ✅ CORREGIDO: Usar showAlert en lugar de showSuccess
+        this.app.showAlert('Compra registrada exitosamente', 'success');
         
     } catch (error) {
         console.error('❌ Error registrando compra:', error);
-        this.app.showError('Error al registrar compra: ' + error.message);
+        // ✅ CORREGIDO: Usar showAlert en lugar de showError
+        this.app.showAlert('Error al registrar compra: ' + error.message, 'danger');
     }
 }
+
 
     async deletePurchase(purchaseId) {
     if (!confirm('¿Estás seguro de que quieres eliminar esta compra?')) {
@@ -180,12 +184,14 @@ class PurchasesManager {
         this.app.showLoading(true);
         await this.app.apiCall(`/purchases/${purchaseId}`, 'DELETE');
         
-        this.app.showSuccess('Compra eliminada exitosamente');
+        // ✅ CORREGIDO: Usar showAlert
+        this.app.showAlert('Compra eliminada exitosamente', 'success');
         await this.loadPurchases();
         
     } catch (error) {
         console.error('Error deleting purchase:', error);
-        this.app.showError('Error al eliminar compra: ' + error.message);
+        // ✅ CORREGIDO: Usar showAlert
+        this.app.showAlert('Error al eliminar compra: ' + error.message, 'danger');
     } finally {
         this.app.showLoading(false);
     }
