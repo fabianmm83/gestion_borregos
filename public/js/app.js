@@ -404,62 +404,51 @@ isTokenExpired(token) {
 
     // ==================== DASHBOARD ====================
 
+// ==================== DASHBOARD ====================
+
 async loadDashboardData() {
     try {
         this.showLoading(true);
+        console.log('📊 Cargando datos del dashboard...');
         
-        // ✅ OBTENER DATOS ESPECÍFICOS PARA EL DASHBOARD
-        const [dashboardData, animalsData] = await Promise.all([
-            this.apiCall('/dashboard').catch(error => {
-                console.warn('Error cargando dashboard:', error);
-                return { total_animals: 0, active_animals: 0, low_stock_items: 0, total_inventory: 0 };
-            }),
-            this.apiCall('/animals').catch(error => {
-                console.warn('Error cargando animales para dashboard:', error);
-                return [];
-            })
-        ]);
-
-        // ✅ SI EL DASHBOARD NO TRAE DATOS, CALCULARLOS MANUALMENTE
-        let finalData = { ...dashboardData };
+        const response = await this.apiCall('/dashboard');
+        console.log('📈 Respuesta completa del dashboard:', response);
         
-        if (!finalData.total_animals && Array.isArray(animalsData)) {
-            finalData.total_animals = animalsData.length;
-            finalData.active_animals = animalsData.filter(animal => 
-                animal.status === 'active' || !animal.status
-            ).length;
+        // ✅ EXTRAER DATOS CORRECTAMENTE DE LA RESPUESTA
+        let dashboardData = {};
+        
+        if (response && typeof response === 'object') {
+            // Si la respuesta tiene data, usarla
+            if (response.data) {
+                dashboardData = response.data;
+            } else {
+                // Usar la respuesta directamente
+                dashboardData = response;
+            }
         }
-
-        // ✅ SI TODAVÍA NO HAY DATOS, USAR VALORES POR DEFECTO
-        if (!finalData.total_animals) {
-            finalData = {
-                total_animals: 0,
-                active_animals: 0,
-                low_stock_items: 0,
-                total_inventory: 0,
-                ...finalData
-            };
-        }
-
-        console.log('📊 Datos del dashboard:', finalData);
+        
+        // ✅ VALORES POR DEFECTO SEGUROS
+        const finalData = {
+            total_animals: dashboardData.total_animals || dashboardData.totalAnimals || 0,
+            active_animals: dashboardData.active_animals || dashboardData.activeAnimals || 0,
+            low_stock_items: dashboardData.low_stock_items || dashboardData.lowStockItems || 0,
+            total_inventory: dashboardData.total_inventory || dashboardData.totalInventory || 0
+        };
+        
+        console.log('🎯 Datos finales para UI:', finalData);
         this.updateDashboardUI(finalData);
         
     } catch (error) {
         console.error('❌ Error loading dashboard:', error);
         
-        // ✅ NO REDIRIGIR A LOGIN - MOSTRAR DATOS VACÍOS
-        if (error.message.includes('Sesión expirada') || error.message.includes('401')) {
-            // Ya se maneja en apiCall
-        } else {
-            this.showAlert('Error al cargar el dashboard. Mostrando datos básicos.', 'warning');
-            // Mostrar dashboard con datos vacíos
-            this.updateDashboardUI({
-                total_animals: 0,
-                active_animals: 0,
-                low_stock_items: 0,
-                total_inventory: 0
-            });
-        }
+        // ✅ NO REDIRIGIR A LOGIN - USAR VALORES POR DEFECTO
+        this.showAlert('Error al cargar el dashboard. Mostrando datos básicos.', 'warning');
+        this.updateDashboardUI({
+            total_animals: 0,
+            active_animals: 0,
+            low_stock_items: 0,
+            total_inventory: 0
+        });
     } finally {
         this.showLoading(false);
     }
@@ -468,34 +457,27 @@ async loadDashboardData() {
 updateDashboardUI(data) {
     console.log('🎨 Actualizando UI del dashboard con:', data);
     
-    // ✅ ACTUALIZAR TARJETAS CON VALORES SEGUROS
-    const safeData = {
-        total_animals: data.total_animals || 0,
-        active_animals: data.active_animals || 0,
-        low_stock_items: data.low_stock_items || 0,
-        total_inventory: data.total_inventory || 0
+    // ✅ FUNCIÓN SEGURA PARA ACTUALIZAR ELEMENTOS
+    const updateElement = (id, value) => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.textContent = value;
+        } else {
+            console.warn(`❌ Elemento ${id} no encontrado`);
+        }
     };
 
-    if (document.getElementById('total-animals')) {
-        document.getElementById('total-animals').textContent = safeData.total_animals;
-    }
-    if (document.getElementById('active-animals')) {
-        document.getElementById('active-animals').textContent = safeData.active_animals;
-    }
-    if (document.getElementById('low-stock-items')) {
-        document.getElementById('low-stock-items').textContent = safeData.low_stock_items;
-    }
-    if (document.getElementById('total-inventory')) {
-        document.getElementById('total-inventory').textContent = safeData.total_inventory;
-    }
+    // ✅ ACTUALIZAR TARJETAS
+    updateElement('total-animals', data.total_animals || 0);
+    updateElement('active-animals', data.active_animals || 0);
+    updateElement('low-stock-items', data.low_stock_items || 0);
+    updateElement('total-inventory', data.total_inventory || 0);
     
     // ✅ ACTUALIZAR ALERTAS
-    if (document.getElementById('low-stock-alert')) {
-        document.getElementById('low-stock-alert').textContent = safeData.low_stock_items + ' items';
-    }
-    if (document.getElementById('active-animals-alert')) {
-        document.getElementById('active-animals-alert').textContent = safeData.active_animals + ' animales';
-    }
+    updateElement('low-stock-alert', (data.low_stock_items || 0) + ' items');
+    updateElement('active-animals-alert', (data.active_animals || 0) + ' animales');
+    
+    console.log('✅ Dashboard actualizado correctamente');
 }
 
     // ==================== NAVEGACIÓN Y VISTAS ====================
@@ -987,8 +969,16 @@ updateDashboardUI(data) {
 
 // ==================== INICIALIZACIÓN GARANTIZADA ====================
 
+// ==================== INICIALIZACIÓN GARANTIZADA ====================
+
 function initializeManagers() {
     console.log('🔄 Inicializando managers...');
+    
+    // ✅ EVITAR INICIALIZACIÓN DOBLE
+    if (window.animalsManager && window.salesManager) {
+        console.log('✅ Managers ya estaban inicializados');
+        return;
+    }
     
     if (window.app) {
         // Inicializar todos los managers
@@ -1005,15 +995,17 @@ function initializeManagers() {
     }
 }
 
-// Inicializar cuando la app esté lista
+// ✅ SOLO UNA INICIALIZACIÓN - elimina los otros listeners duplicados
 document.addEventListener('DOMContentLoaded', function() {
     console.log('📄 DOM cargado, inicializando app...');
     
-    // Inicializar la aplicación principal
-    window.app = new App();
+    // Verificar si ya está inicializada
+    if (!window.app) {
+        window.app = new App();
+    }
     
     // Inicializar managers después de un breve delay
-    setTimeout(initializeManagers, 1000);
+    setTimeout(initializeManagers, 500);
 });
 
 
