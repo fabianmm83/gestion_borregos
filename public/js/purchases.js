@@ -166,9 +166,10 @@ findPurchasesArray(obj) {
     
 
     
+   
     async handlePurchaseSubmit(formElement) {
     try {
-        // ✅ EXTRAER DATOS del formulario
+        // Extraer datos del formulario
         const formData = new FormData(formElement);
         const data = Object.fromEntries(formData.entries());
         
@@ -189,14 +190,27 @@ findPurchasesArray(obj) {
 
         console.log('📦 Enviando compra:', purchaseData);
         
-        const response = await this.app.apiCall('/purchases', 'POST', purchaseData);
+        // ✅ HACER EL API CALL CORRECTAMENTE
+        const response = await this.app.apiCall('/purchases', {
+            method: 'POST',
+            body: purchaseData
+        });
+        
         console.log('✅ Compra registrada:', response);
         
-        // Cerrar modal y recargar lista
-        bootstrap.Modal.getInstance(document.getElementById('purchase-form-modal')).hide();
-        await this.loadPurchases();
-        
-        this.app.showAlert('Compra registrada exitosamente', 'success');
+        if (response.success) {
+            // Cerrar modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('purchase-form-modal'));
+            if (modal) modal.hide();
+            
+            // Recargar lista de compras
+            await this.loadPurchases();
+            
+            // Mostrar alerta de éxito
+            this.app.showAlert('Compra registrada exitosamente', 'success');
+        } else {
+            throw new Error(response.message || 'Error al registrar compra');
+        }
         
     } catch (error) {
         console.error('❌ Error registrando compra:', error);
