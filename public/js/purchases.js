@@ -31,19 +31,21 @@ class PurchasesManager {
         console.log('🔄 Cargando compras desde API...');
         const response = await this.app.apiCall('/purchases');
         
+        console.log('📋 Respuesta completa:', response); // ← AGREGAR ESTO PARA DEBUG
+        
         // MANEJO MEJORADO DE FORMATOS DE RESPUESTA
         let purchases = [];
         
         if (Array.isArray(response)) {
             // Formato: array directo
             purchases = response;
-        } else if (response.purchases) {
+        } else if (response.purchases && Array.isArray(response.purchases)) {
             // Formato: { purchases: [], pagination: {} }
             purchases = response.purchases;
         } else if (response.data && Array.isArray(response.data)) {
             // Formato: { data: [], ... }
             purchases = response.data;
-        } else if (response.data && response.data.purchases) {
+        } else if (response.data && response.data.purchases && Array.isArray(response.data.purchases)) {
             // Formato: { data: { purchases: [], pagination: {} }, ... }
             purchases = response.data.purchases;
         } else {
@@ -51,13 +53,14 @@ class PurchasesManager {
             purchases = [];
         }
         
+        console.log(`🛒 Compras extraídas:`, purchases); // ← VER QUÉ SE EXTRAE
         this.purchases = purchases;
         console.log(`✅ ${purchases.length} compras cargadas`);
         this.renderPurchases();
         
     } catch (error) {
         console.error('Error loading purchases:', error);
-        this.app.showError('Error al cargar compras: ' + error.message);
+        this.app.showAlert('Error al cargar compras: ' + error.message, 'danger');
     }
 }
 
