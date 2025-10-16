@@ -1,34 +1,55 @@
 class ReportsManager {
     constructor(app) {
         this.app = app;
-        this.charts = {}; // Objeto para almacenar instancias de gráficas
+        this.charts = {};
+        this.initialized = false;
         this.init();
     }
 
     init() {
+        if (this.initialized) {
+            console.log('⚠️ ReportsManager ya estaba inicializado');
+            return;
+        }
+        
         console.log('📊 ReportsManager inicializado');
+        this.initialized = true;
     }
 
     async generateReports() {
         try {
             this.app.showLoading(true);
+            console.log('📈 Generando reportes...');
             
             // Destruir gráficas existentes antes de crear nuevas
             this.destroyCharts();
             
-            // Cargar datos para reportes (manejar errores individualmente)
-            const [salesResponse, animalsResponse, inventoryResponse] = await Promise.allSettled([
-                this.app.apiCall('/sales'),
-                this.app.apiCall('/animals'),
-                this.app.apiCall('/inventory')
+            // Cargar datos para reportes con manejo de errores individual
+            const [salesResponse, animalsResponse, inventoryResponse, feedsResponse] = await Promise.allSettled([
+                this.app.apiCall('/sales').catch(() => ({ data: { sales: [] } })),
+                this.app.apiCall('/animals').catch(() => ({ data: { animals: [] } })),
+                this.app.apiCall('/inventory').catch(() => ({ data: { inventory: [] } })),
+                this.app.apiCall('/feeds').catch(() => ({ data: { feeds: [] } }))
             ]);
 
-            // Extraer datos de las respuestas exitosas
-            const sales = salesResponse.status === 'fulfilled' ? salesResponse.value.data?.sales || [] : [];
-            const animals = animalsResponse.status === 'fulfilled' ? animalsResponse.value.data?.animals || [] : [];
-            const inventory = inventoryResponse.status === 'fulfilled' ? inventoryResponse.value.data?.inventory || [] : [];
+            // Extraer datos de las respuestas
+            const sales = this.extractData(salesResponse, 'sales');
+            const animals = this.extractData(animalsResponse, 'animals');
+            const inventory = this.extractData(inventoryResponse, 'inventory');
+            const feeds = this.extractData(feedsResponse, 'feeds');
 
-            this.generateCharts(sales, animals, inventory);
+            console.log('📊 Datos cargados:', {
+                sales: sales.length,
+                animals: animals.length,
+                inventory: inventory.length,
+                feeds: feeds.length
+            });
+
+            // Generar todas las gráficas
+            this.generateAllCharts(sales, animals, inventory, feeds);
+            
+            // Actualizar estadísticas rápidas
+            this.updateQuickStats(sales, animals, inventory, feeds);
             
         } catch (error) {
             console.error('Error generating reports:', error);
@@ -38,130 +59,74 @@ class ReportsManager {
         }
     }
 
-    // ✅ NUEVO MÉTODO: Destruir gráficas existentes
-    destroyCharts() {
-        Object.values(this.charts).forEach(chart => {
-            if (chart && typeof chart.destroy === 'function') {
-                chart.destroy();
-            }
-        });
-        this.charts = {};
+    extractData(response, key) {
+        if (response.status === 'fulfilled') {
+            const value = response.value;
+            if (Array.isArray(value)) return value;
+            if (value && Array.isArray(value.data)) return value.data;
+            if (value && value.data && Array.isArray(value.data[key])) return value.data[key];
+            if (value && Array.isArray(value[key])) return value[key];
+        }
+        return [];
     }
 
-    generateCharts(sales, animals, inventory) {
+    generateAllCharts(sales, animals, inventory, feeds) {
         this.generateSalesChart(sales);
         this.generateAnimalsStatusChart(animals);
         this.generateInventoryCategoryChart(inventory);
-        this.generateFeedConsumptionChart(); // Agregar gráfica de consumo
+        this.generateFeedConsumptionChart(feeds);
+        this.generateMonthlyComparisonChart(sales, feeds);
     }
 
     generateSalesChart(sales) {
         const ctx = document.getElementById('sales-purchases-chart');
         if (!ctx) return;
 
-        // Procesar datos reales de ventas
-        const monthlySales = this.processMonthlySales(sales);
+        const monthlyData = this.processMonthlySales(sales);
+
+        // Si no hay datos, mostrar mensaje
+        if (monthlyData.data.every(val => val === 0)) {
+            ctx.closest('.card-body').innerHTML = this.getNoDataMessage('Ventas');
+            return;
+        }
 
         const chartData = {
-            labels: monthlySales.labels,
+            labels: monthlyData.labels,
             datasets: [{
                 label: 'Ventas ($)',
-                data: monthlySales.data,
+                data: monthlyData.data,
                 backgroundColor: 'rgba(54, 162, 235, 0.2)',
                 borderColor: 'rgba(54, 162, 235, 1)',
                 borderWidth: 2,
-                fill: true
+                fill: true,
+                tension: 0.4
             }]
         };
 
-        // Destruir gráfica existente si hay una
-        if (this.charts.sales) {
-            this.charts.sales.destroy();
-        }
-
-        this.charts.sales = new Chart(ctx, {
-            type: 'line',
-            data: chartData,
-            options: {
-                responsive: true,
-                plugins: {
-                    title: {
-                        display: true,
-                        text: 'Ventas Mensuales'
-                    },
-                    legend: {
-                        display: true
-                    }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        title: {
-                            display: true,
-                            text: 'Monto ($)'
-                        }
-                    }
-                }
-            }
-        });
-    }
-
-    // ✅ NUEVO MÉTODO: Procesar ventas mensuales
-    processMonthlySales(sales) {
-        const monthlyData = {};
-        
-        sales.forEach(sale => {
-            if (sale.saleDate && sale.salePrice) {
-                const date = new Date(sale.saleDate);
-                const monthYear = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`;
-                
-                if (!monthlyData[monthYear]) {
-                    monthlyData[monthYear] = 0;
-                }
-                monthlyData[monthYear] += sale.salePrice;
-            }
-        });
-
-        // Ordenar por fecha y limitar a últimos 6 meses
-        const sortedMonths = Object.keys(monthlyData).sort().slice(-6);
-        
-        return {
-            labels: sortedMonths.map(month => {
-                const [year, monthNum] = month.split('-');
-                const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-                return `${months[parseInt(monthNum) - 1]} ${year}`;
-            }),
-            data: sortedMonths.map(month => monthlyData[month])
-        };
+        this.createChart('sales', ctx, 'line', chartData, 'Ventas Mensuales', 'Monto ($)');
     }
 
     generateAnimalsStatusChart(animals) {
         const ctx = document.getElementById('animals-status-chart');
         if (!ctx) return;
 
-        // Contar animales por estado
-        const statusCount = {
-            active: 0,
-            sold: 0,
-            deceased: 0,
-            transferred: 0,
-            unknown: 0
-        };
+        const statusCount = this.countByStatus(animals, 'status');
 
-        animals.forEach(animal => {
-            const status = animal.status || 'unknown';
-            statusCount[status] = (statusCount[status] || 0) + 1;
-        });
+        // Si no hay animales, mostrar mensaje
+        if (Object.values(statusCount).every(val => val === 0)) {
+            ctx.closest('.card-body').innerHTML = this.getNoDataMessage('Animales');
+            return;
+        }
 
         const chartData = {
             labels: ['Activos', 'Vendidos', 'Fallecidos', 'Transferidos', 'Desconocido'],
             datasets: [{
                 data: [
-                    statusCount.active,
-                    statusCount.sold,
-                    statusCount.deceased,
-                    statusCount.transferred,
-                    statusCount.unknown
+                    statusCount.active || 0,
+                    statusCount.sold || 0,
+                    statusCount.deceased || 0,
+                    statusCount.transferred || 0,
+                    statusCount.unknown || 0
                 ],
                 backgroundColor: [
                     'rgba(75, 192, 192, 0.8)',
@@ -181,38 +146,20 @@ class ReportsManager {
             }]
         };
 
-        if (this.charts.animals) {
-            this.charts.animals.destroy();
-        }
-
-        this.charts.animals = new Chart(ctx, {
-            type: 'doughnut',
-            data: chartData,
-            options: {
-                responsive: true,
-                plugins: {
-                    title: {
-                        display: true,
-                        text: 'Estado de Animales'
-                    },
-                    legend: {
-                        position: 'bottom'
-                    }
-                }
-            }
-        });
+        this.createChart('animals', ctx, 'doughnut', chartData, 'Estado de Animales');
     }
 
     generateInventoryCategoryChart(inventory) {
         const ctx = document.getElementById('inventory-category-chart');
         if (!ctx) return;
 
-        // Contar items por categoría
-        const categoryCount = {};
-        inventory.forEach(item => {
-            const category = item.category || 'other';
-            categoryCount[category] = (categoryCount[category] || 0) + 1;
-        });
+        const categoryCount = this.countByCategory(inventory);
+
+        // Si no hay inventario, mostrar mensaje
+        if (Object.values(categoryCount).every(val => val === 0)) {
+            ctx.closest('.card-body').innerHTML = this.getNoDataMessage('Inventario');
+            return;
+        }
 
         const categoryLabels = {
             'medicine': 'Medicinas',
@@ -233,100 +180,321 @@ class ReportsManager {
             }]
         };
 
-        if (this.charts.inventory) {
-            this.charts.inventory.destroy();
-        }
-
-        this.charts.inventory = new Chart(ctx, {
-            type: 'bar',
-            data: chartData,
-            options: {
-                responsive: true,
-                plugins: {
-                    title: {
-                        display: true,
-                        text: 'Inventario por Categoría'
-                    }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        title: {
-                            display: true,
-                            text: 'Cantidad de Items'
-                        }
-                    }
-                }
-            }
-        });
+        this.createChart('inventory', ctx, 'bar', chartData, 'Inventario por Categoría', 'Cantidad de Items');
     }
 
-    generateFeedConsumptionChart() {
+    generateFeedConsumptionChart(feeds) {
         const ctx = document.getElementById('feed-consumption-chart');
         if (!ctx) return;
 
-        // Datos de ejemplo para consumo de alimento
+        const monthlyConsumption = this.processMonthlyFeedConsumption(feeds);
+
+        // Si no hay datos, mostrar mensaje
+        if (monthlyConsumption.data.every(val => val === 0)) {
+            ctx.closest('.card-body').innerHTML = this.getNoDataMessage('Consumo de Alimento');
+            return;
+        }
+
         const chartData = {
-            labels: ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun'],
+            labels: monthlyConsumption.labels,
             datasets: [{
                 label: 'Consumo (kg)',
-                data: [120, 150, 180, 200, 170, 190],
+                data: monthlyConsumption.data,
                 backgroundColor: 'rgba(75, 192, 192, 0.2)',
                 borderColor: 'rgba(75, 192, 192, 1)',
                 borderWidth: 2,
-                fill: true
+                fill: true,
+                tension: 0.4
             }]
         };
 
-        if (this.charts.feed) {
-            this.charts.feed.destroy();
+        this.createChart('feed', ctx, 'line', chartData, 'Consumo de Alimento Mensual', 'Kilogramos (kg)');
+    }
+
+    generateMonthlyComparisonChart(sales, feeds) {
+        const ctx = document.getElementById('monthly-comparison-chart');
+        if (!ctx) return;
+
+        const monthlySales = this.processMonthlySales(sales);
+        const monthlyFeeds = this.processMonthlyFeedConsumption(feeds);
+
+        // Si no hay datos suficientes, mostrar mensaje
+        if (monthlySales.data.every(val => val === 0) && monthlyFeeds.data.every(val => val === 0)) {
+            ctx.closest('.card-body').innerHTML = this.getNoDataMessage('Comparación Mensual');
+            return;
         }
 
-        this.charts.feed = new Chart(ctx, {
-            type: 'line',
-            data: chartData,
-            options: {
-                responsive: true,
-                plugins: {
-                    title: {
-                        display: true,
-                        text: 'Consumo de Alimento Mensual'
+        const chartData = {
+            labels: monthlySales.labels,
+            datasets: [
+                {
+                    label: 'Ventas ($)',
+                    data: monthlySales.data,
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                    yAxisID: 'y',
+                    tension: 0.4
+                },
+                {
+                    label: 'Consumo Alimento (kg)',
+                    data: monthlyFeeds.data,
+                    borderColor: 'rgba(75, 192, 192, 1)',
+                    backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                    yAxisID: 'y1',
+                    tension: 0.4
+                }
+            ]
+        };
+
+        this.createChart('comparison', ctx, 'line', chartData, 'Ventas vs Consumo Mensual', '', true);
+    }
+
+    createChart(key, ctx, type, data, title, yLabel = '', dualYAxis = false) {
+        // Destruir gráfica existente si hay una
+        if (this.charts[key]) {
+            this.charts[key].destroy();
+        }
+
+        const options = {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                title: {
+                    display: true,
+                    text: title,
+                    font: {
+                        size: 16
                     }
                 },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        title: {
-                            display: true,
-                            text: 'Kilogramos (kg)'
-                        }
+                legend: {
+                    display: true,
+                    position: 'top'
+                }
+            }
+        };
+
+        if (dualYAxis) {
+            options.scales = {
+                y: {
+                    type: 'linear',
+                    display: true,
+                    position: 'left',
+                    title: {
+                        display: true,
+                        text: 'Ventas ($)'
                     }
+                },
+                y1: {
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
+                    title: {
+                        display: true,
+                        text: 'Consumo (kg)'
+                    },
+                    grid: {
+                        drawOnChartArea: false
+                    }
+                }
+            };
+        } else if (yLabel) {
+            options.scales = {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: yLabel
+                    }
+                }
+            };
+        }
+
+        this.charts[key] = new Chart(ctx, {
+            type: type,
+            data: data,
+            options: options
+        });
+    }
+
+    processMonthlySales(sales) {
+        const monthlyData = {};
+        const last6Months = this.getLast6Months();
+        
+        // Inicializar últimos 6 meses
+        last6Months.forEach(month => {
+            monthlyData[month] = 0;
+        });
+
+        // Procesar ventas
+        sales.forEach(sale => {
+            if (sale.saleDate && sale.salePrice) {
+                const date = new Date(sale.saleDate);
+                const monthYear = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`;
+                
+                if (monthlyData[monthYear] !== undefined) {
+                    monthlyData[monthYear] += sale.salePrice;
                 }
             }
         });
+
+        return {
+            labels: last6Months.map(month => {
+                const [year, monthNum] = month.split('-');
+                const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+                return `${months[parseInt(monthNum) - 1]} ${year}`;
+            }),
+            data: last6Months.map(month => monthlyData[month])
+        };
+    }
+
+    processMonthlyFeedConsumption(feeds) {
+        const monthlyData = {};
+        const last6Months = this.getLast6Months();
+        
+        // Inicializar últimos 6 meses
+        last6Months.forEach(month => {
+            monthlyData[month] = 0;
+        });
+
+        // Procesar consumo de alimento
+        feeds.forEach(feed => {
+            if (feed.feedingDate && feed.quantity) {
+                const date = new Date(feed.feedingDate);
+                const monthYear = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`;
+                
+                if (monthlyData[monthYear] !== undefined) {
+                    monthlyData[monthYear] += feed.quantity;
+                }
+            }
+        });
+
+        return {
+            labels: last6Months.map(month => {
+                const [year, monthNum] = month.split('-');
+                const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+                return `${months[parseInt(monthNum) - 1]} ${year}`;
+            }),
+            data: last6Months.map(month => monthlyData[month])
+        };
+    }
+
+    countByStatus(items, statusKey) {
+        const count = {
+            active: 0,
+            sold: 0,
+            deceased: 0,
+            transferred: 0,
+            unknown: 0
+        };
+
+        items.forEach(item => {
+            const status = item[statusKey] || 'unknown';
+            count[status] = (count[status] || 0) + 1;
+        });
+
+        return count;
+    }
+
+    countByCategory(inventory) {
+        const count = {
+            medicine: 0,
+            equipment: 0,
+            supplies: 0,
+            tools: 0,
+            other: 0
+        };
+
+        inventory.forEach(item => {
+            const category = item.category || 'other';
+            count[category] = (count[category] || 0) + 1;
+        });
+
+        return count;
+    }
+
+    getLast6Months() {
+        const months = [];
+        const today = new Date();
+        
+        for (let i = 5; i >= 0; i--) {
+            const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
+            const year = date.getFullYear();
+            const month = (date.getMonth() + 1).toString().padStart(2, '0');
+            months.push(`${year}-${month}`);
+        }
+        
+        return months;
+    }
+
+    updateQuickStats(sales, animals, inventory, feeds) {
+        // Ventas totales
+        const totalSales = sales.reduce((sum, sale) => sum + (sale.salePrice || 0), 0);
+        const salesElement = document.getElementById('total-sales');
+        if (salesElement) salesElement.textContent = this.app.formatCurrency(totalSales);
+
+        // Animales activos
+        const activeAnimals = animals.filter(animal => animal.status === 'active').length;
+        const animalsElement = document.getElementById('active-animals-count');
+        if (animalsElement) animalsElement.textContent = activeAnimals;
+
+        // Items en inventario
+        const inventoryElement = document.getElementById('inventory-items-count');
+        if (inventoryElement) inventoryElement.textContent = inventory.length;
+
+        // Consumo total de alimento
+        const totalFeed = feeds.reduce((sum, feed) => sum + (feed.quantity || 0), 0);
+        const feedElement = document.getElementById('total-feed-consumption');
+        if (feedElement) feedElement.textContent = `${totalFeed} kg`;
+    }
+
+    getNoDataMessage(chartType) {
+        return `
+            <div class="text-center py-4">
+                <i class="fas fa-chart-line fa-3x text-muted mb-3"></i>
+                <h5 class="text-muted">No hay datos disponibles</h5>
+                <p class="text-muted small">No se encontraron datos para ${chartType}</p>
+            </div>
+        `;
+    }
+
+    destroyCharts() {
+        Object.values(this.charts).forEach(chart => {
+            if (chart && typeof chart.destroy === 'function') {
+                chart.destroy();
+            }
+        });
+        this.charts = {};
     }
 
     // Métodos para exportar reportes
     exportSalesReport() {
-        this.app.showAlert('Exportación de reportes en desarrollo', 'info');
-    }
-
-    exportPurchasesReport() {
-        this.app.showAlert('Exportación de reportes en desarrollo', 'info');
+        this.app.showAlert('Funcionalidad de exportación en desarrollo', 'info');
     }
 
     exportInventoryReport() {
-        this.app.showAlert('Exportación de reportes en desarrollo', 'info');
+        this.app.showAlert('Funcionalidad de exportación en desarrollo', 'info');
     }
 
     exportAnimalsReport() {
-        this.app.showAlert('Exportación de reportes en desarrollo', 'info');
+        this.app.showAlert('Funcionalidad de exportación en desarrollo', 'info');
+    }
+
+    refreshReports() {
+        this.generateReports();
+        this.app.showAlert('Reportes actualizados', 'success');
     }
 }
 
-// Inicialización
-document.addEventListener('DOMContentLoaded', () => {
-    if (window.app) {
+// Inicialización optimizada
+function initializeReportsManager() {
+    if (!window.reportsManager || !window.reportsManager.initialized) {
         window.reportsManager = new ReportsManager(window.app);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', initializeReportsManager);
+document.addEventListener('reportsViewLoaded', () => {
+    if (window.reportsManager) {
+        window.reportsManager.generateReports();
     }
 });
