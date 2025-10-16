@@ -55,7 +55,8 @@ const COLLECTIONS = {
     ANIMALS: 'animals',
     SALES: 'sales',
     FEEDS: 'feeds',
-    INVENTORY: 'inventory'
+    INVENTORY: 'inventory',
+    PURCHASES: 'purchases'
 };
 
 const ANIMAL_STATUS = {
@@ -127,6 +128,7 @@ app.get('/', (req, res) => {
             'GET    /health',
             'POST   /auth/create-admin',
             'POST   /auth/verify',
+            'POST   /auth/logout',
             'POST   /initialize',
             'GET    /dashboard',
             'GET    /animals',
@@ -139,9 +141,18 @@ app.get('/', (req, res) => {
             'DELETE /sales/:id',
             'GET    /feeds',
             'POST   /feeds',
+            'PUT    /feeds/:id',
+            'DELETE /feeds/:id',
             'GET    /inventory',
             'POST   /inventory',
-            'PUT    /inventory/:id/stock'
+            'GET    /inventory/:id',
+            'PUT    /inventory/:id',
+            'DELETE /inventory/:id',
+            'PUT    /inventory/:id/stock',
+            'GET    /purchases',
+            'POST   /purchases',
+            'PUT    /purchases/:id',
+            'DELETE /purchases/:id'
         ]
     }, 'Bienvenido al Sistema de Gestión de Borregos'));
 });
@@ -154,7 +165,7 @@ app.get('/health', (req, res) => {
     }, 'Sistema funcionando correctamente'));
 });
 
-// ==================== ENDPOINTS DE AUTENTICACIÓN ====================
+// ==================== ENDPOINTS DE AUTENTICACIÓN MEJORADOS ====================
 
 app.post('/auth/create-admin', async (req, res) => {
     try {
@@ -219,21 +230,114 @@ app.post('/auth/create-admin', async (req, res) => {
     }
 });
 
+// Verificar y refrescar token - MEJORADO
 app.post('/auth/verify', async (req, res) => {
     try {
-        const { token } = req.body;
+        const { token, refreshToken } = req.body;
         
-        if (!token) {
+        if (!token && !refreshToken) {
             return res.status(400).json(
-                createResponse(false, null, 'Token requerido', 'MISSING_TOKEN')
+                createResponse(false, null, 'Token o refresh token requerido', 'MISSING_TOKEN')
             );
         }
 
-        const decodedToken = await admin.auth().verifyIdToken(token);
-        
+        let decodedToken;
+        let newToken;
+
+        // Intentar verificar el token principal primero
+        if (token) {
+            try {
+                decodedToken = await admin.auth().verifyIdToken(token);
+            } catch (tokenError) {
+                // Si el token expiró, usar refresh token
+                if (tokenError.code === 'auth/id-token-expired' && refreshToken) {
+                    try {
+                        // Buscar sesión por refresh token
+                        const userRefreshDoc = await db.collection('user_sessions')
+                            .where('refreshToken', '==', refreshToken)
+                            .limit(1)
+                            .get();
+                            
+                        if (!userRefreshDoc.empty) {
+                            const sessionData = userRefreshDoc.docs[0].data();
+                            // Verificar que la sesión no haya expirado
+                            if (sessionData.expiresAt && new Date(sessionData.expiresAt.toDate()) > new Date()) {
+                                const userRecord = await admin.auth().getUser(sessionData.uid);
+                                decodedToken = {
+                                    uid: sessionData.uid,
+                                    email: userRecord.email,
+                                    name: userRecord.displayName
+                                };
+                                // Marcar que necesitamos generar nuevo token
+                                newToken = true;
+                            } else {
+                                // Eliminar sesión expirada
+                                await db.collection('user_sessions').doc(sessionData.uid).delete();
+                                throw new Error('Refresh token expirado');
+                            }
+                        } else {
+                            throw new Error('Refresh token inválido');
+                        }
+                    } catch (refreshError) {
+                        return res.status(401).json(
+                            createResponse(false, null, 'Sesión expirada', 'SESSION_EXPIRED')
+                        );
+                    }
+                } else {
+                    throw tokenError;
+                }
+            }
+        } else if (refreshToken) {
+            // Solo tenemos refresh token
+            try {
+                const userRefreshDoc = await db.collection('user_sessions')
+                    .where('refreshToken', '==', refreshToken)
+                    .limit(1)
+                    .get();
+                    
+                if (!userRefreshDoc.empty) {
+                    const sessionData = userRefreshDoc.docs[0].data();
+                    // Verificar expiración
+                    if (sessionData.expiresAt && new Date(sessionData.expiresAt.toDate()) > new Date()) {
+                        const userRecord = await admin.auth().getUser(sessionData.uid);
+                        decodedToken = {
+                            uid: sessionData.uid,
+                            email: userRecord.email,
+                            name: userRecord.displayName
+                        };
+                        newToken = true;
+                    } else {
+                        await db.collection('user_sessions').doc(sessionData.uid).delete();
+                        throw new Error('Refresh token expirado');
+                    }
+                } else {
+                    return res.status(401).json(
+                        createResponse(false, null, 'Sesión inválida', 'INVALID_SESSION')
+                    );
+                }
+            } catch (refreshError) {
+                return res.status(401).json(
+                    createResponse(false, null, 'Error al refrescar sesión', 'REFRESH_ERROR')
+                );
+            }
+        }
+
         // Obtener información del usuario desde Firestore
         const userDoc = await db.collection(COLLECTIONS.USERS).doc(decodedToken.uid).get();
         const userData = userDoc.exists ? userDoc.data() : {};
+
+        // Generar nuevo refresh token si es necesario
+        const newRefreshToken = newToken ? require('crypto').randomBytes(32).toString('hex') : null;
+
+        // Guardar sesión si hay nuevo refresh token
+        if (newRefreshToken) {
+            await db.collection('user_sessions').doc(decodedToken.uid).set({
+                uid: decodedToken.uid,
+                refreshToken: newRefreshToken,
+                lastRefresh: admin.firestore.FieldValue.serverTimestamp(),
+                expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 días
+            });
+        }
 
         // Actualizar último login
         if (userDoc.exists) {
@@ -244,6 +348,8 @@ app.post('/auth/verify', async (req, res) => {
 
         res.json(createResponse(true, {
             valid: true,
+            token: token, // Mantener el token original o indicar que se necesita uno nuevo
+            refreshToken: newRefreshToken || refreshToken,
             user: {
                 uid: decodedToken.uid,
                 email: decodedToken.email,
@@ -251,11 +357,28 @@ app.post('/auth/verify', async (req, res) => {
                 role: userData.role || 'user',
                 lastLogin: userData.lastLogin?.toDate?.() || null
             }
-        }, 'Token válido'));
+        }, newToken ? 'Sesión refrescada exitosamente' : 'Token válido'));
 
     } catch (error) {
         logger.error('Error en verificación de token', error);
         res.status(401).json(createResponse(false, null, 'Token inválido', 'INVALID_TOKEN'));
+    }
+});
+
+// Cerrar sesión (invalidar refresh token)
+app.post('/auth/logout', authenticate, async (req, res) => {
+    try {
+        const userId = req.user.uid;
+        
+        // Eliminar sesión
+        await db.collection('user_sessions').doc(userId).delete();
+        
+        logger.info('Usuario cerró sesión', { userId });
+        
+        res.json(createResponse(true, null, 'Sesión cerrada exitosamente'));
+    } catch (error) {
+        logger.error('Error al cerrar sesión', error);
+        res.status(500).json(createResponse(false, null, 'Error al cerrar sesión', error.message));
     }
 });
 
@@ -320,12 +443,14 @@ app.get('/dashboard', authenticate, async (req, res) => {
             animalsSnapshot,
             salesSnapshot,
             inventorySnapshot,
-            feedsSnapshot
+            feedsSnapshot,
+            purchasesSnapshot
         ] = await Promise.all([
             db.collection(COLLECTIONS.ANIMALS).where('userId', '==', userId).get(),
             db.collection(COLLECTIONS.SALES).where('userId', '==', userId).get(),
             db.collection(COLLECTIONS.INVENTORY).where('userId', '==', userId).get(),
-            db.collection(COLLECTIONS.FEEDS).where('userId', '==', userId).get()
+            db.collection(COLLECTIONS.FEEDS).where('userId', '==', userId).get(),
+            db.collection(COLLECTIONS.PURCHASES).where('userId', '==', userId).get()
         ]);
 
         // Procesar datos de animales
@@ -352,6 +477,10 @@ app.get('/dashboard', authenticate, async (req, res) => {
         const feedsData = feedsSnapshot.docs.map(doc => doc.data());
         const totalFeedUsed = feedsData.reduce((sum, feed) => sum + (feed.quantity || 0), 0);
 
+        // Procesar datos de compras
+        const purchasesData = purchasesSnapshot.docs.map(doc => doc.data());
+        const totalSpent = purchasesData.reduce((sum, purchase) => sum + (purchase.totalCost || 0), 0);
+
         const dashboardData = {
             summary: {
                 total_animals: totalAnimals,
@@ -360,7 +489,9 @@ app.get('/dashboard', authenticate, async (req, res) => {
                 total_revenue: totalRevenue,
                 total_inventory: inventorySnapshot.size,
                 low_stock_items: lowStockItems,
-                total_feed_used: totalFeedUsed
+                total_feed_used: totalFeedUsed,
+                total_purchases: purchasesSnapshot.size,
+                total_spent: totalSpent
             },
             recent_activity: {
                 recent_sales: recentSales,
@@ -380,11 +511,11 @@ app.get('/dashboard', authenticate, async (req, res) => {
 
 // ==================== GESTIÓN DE ANIMALES ====================
 
-// Obtener animales
+// Obtener animales - FORMATO FLEXIBLE
 app.get('/animals', authenticate, async (req, res) => {
     try {
         const userId = req.user.uid;
-        const { page = 1, limit = 50, status, breed, search } = req.query;
+        const { page = 1, limit = 50, status, breed, search, format = 'standard' } = req.query;
 
         let query = db.collection(COLLECTIONS.ANIMALS).where('userId', '==', userId);
 
@@ -418,16 +549,30 @@ app.get('/animals', authenticate, async (req, res) => {
         const endIndex = startIndex + parseInt(limit);
         const paginatedAnimals = animals.slice(startIndex, endIndex);
 
-        res.json(createResponse(true, {
-            animals: paginatedAnimals,
-            pagination: {
-                currentPage: parseInt(page),
-                totalPages: Math.ceil(animals.length / limit),
-                totalAnimals: animals.length,
-                hasNext: endIndex < animals.length,
-                hasPrev: startIndex > 0
-            }
-        }, 'Animales obtenidos exitosamente'));
+        // Formato de respuesta flexible
+        let responseData;
+        switch (format) {
+            case 'direct':
+                responseData = paginatedAnimals;
+                break;
+            case 'simple':
+                responseData = { animals: paginatedAnimals };
+                break;
+            case 'standard':
+            default:
+                responseData = {
+                    animals: paginatedAnimals,
+                    pagination: {
+                        currentPage: parseInt(page),
+                        totalPages: Math.ceil(animals.length / limit),
+                        totalAnimals: animals.length,
+                        hasNext: endIndex < animals.length,
+                        hasPrev: startIndex > 0
+                    }
+                };
+        }
+
+        res.json(createResponse(true, responseData, 'Animales obtenidos exitosamente'));
 
     } catch (error) {
         logger.error('Error obteniendo animales', error);
@@ -773,6 +918,19 @@ app.delete('/sales/:id', authenticate, async (req, res) => {
             );
         }
 
+        // Si la venta tenía un animal asociado, restaurar su estado a "active"
+        if (saleData.animalId) {
+            try {
+                await db.collection(COLLECTIONS.ANIMALS).doc(saleData.animalId).update({
+                    status: ANIMAL_STATUS.ACTIVE,
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+                });
+                logger.info('Estado del animal restaurado a activo', { animalId: saleData.animalId });
+            } catch (updateError) {
+                logger.warn('No se pudo restaurar estado del animal', updateError);
+            }
+        }
+
         await db.collection(COLLECTIONS.SALES).doc(saleId).delete();
         logger.info('Venta eliminada exitosamente', { saleId });
         
@@ -784,7 +942,7 @@ app.delete('/sales/:id', authenticate, async (req, res) => {
     }
 });
 
-// ==================== CONTROL DE ALIMENTOS ====================
+// ==================== CONTROL DE ALIMENTOS - ESTRUCTURA ACTUALIZADA ====================
 
 // Obtener alimentos
 app.get('/feeds', authenticate, async (req, res) => {
@@ -838,30 +996,31 @@ app.get('/feeds', authenticate, async (req, res) => {
     }
 });
 
-// Registrar alimentación
+// Registrar alimentación (LOTES)
 app.post('/feeds', authenticate, async (req, res) => {
     try {
         const userId = req.user.uid;
         const {
+            batchNumber,
             feedType,
             quantity,
             unit,
             feedingDate,
-            animalEarTag,
             notes
         } = req.body;
 
-        logger.info('Registrando nueva alimentación', { feedType, quantity, userId });
+        logger.info('Registrando nuevo lote de alimento', { batchNumber, feedType, userId });
 
         // Validaciones
-        if (!feedType || !quantity) {
+        if (!batchNumber || !feedType || !quantity) {
             return res.status(400).json(
-                createResponse(false, null, 'Tipo y cantidad de alimento son obligatorios', 'MISSING_REQUIRED_FIELDS')
+                createResponse(false, null, 'Número de lote, tipo y cantidad son obligatorios', 'MISSING_REQUIRED_FIELDS')
             );
         }
 
         const feedData = {
             userId,
+            batchNumber,
             feedType,
             quantity: parseFloat(quantity),
             unit: unit || 'kg',
@@ -870,44 +1029,91 @@ app.post('/feeds', authenticate, async (req, res) => {
             createdAt: admin.firestore.FieldValue.serverTimestamp()
         };
 
-        // Asociar animal si se proporciona arete
-        if (animalEarTag) {
-            try {
-                const animalQuery = await db.collection(COLLECTIONS.ANIMALS)
-                    .where('userId', '==', userId)
-                    .where('earTag', '==', animalEarTag)
-                    .get();
-                    
-                if (!animalQuery.empty) {
-                    const animalDoc = animalQuery.docs[0];
-                    feedData.animalId = animalDoc.id;
-                    feedData.animalEarTag = animalEarTag;
-                    logger.info('Animal asociado a alimentación', { animalEarTag });
-                } else {
-                    feedData.animalEarTag = animalEarTag;
-                }
-            } catch (animalError) {
-                feedData.animalEarTag = animalEarTag;
-            }
-        }
-
         const feedRef = await db.collection(COLLECTIONS.FEEDS).add(feedData);
-        logger.info('Alimentación registrada exitosamente', { feedId: feedRef.id });
+        logger.info('Lote de alimento registrado exitosamente', { feedId: feedRef.id });
 
         res.status(201).json(createResponse(true, {
             id: feedRef.id,
             ...feedData
-        }, 'Alimentación registrada exitosamente'));
+        }, 'Lote de alimento registrado exitosamente'));
 
     } catch (error) {
-        logger.error('Error registrando alimentación', error);
-        res.status(500).json(createResponse(false, null, 'Error al registrar alimentación', error.message));
+        logger.error('Error registrando lote de alimento', error);
+        res.status(500).json(createResponse(false, null, 'Error al registrar lote de alimento', error.message));
+    }
+});
+
+// Actualizar lote de alimento
+app.put('/feeds/:id', authenticate, async (req, res) => {
+    try {
+        const userId = req.user.uid;
+        const feedId = req.params.id;
+        
+        const feedDoc = await db.collection(COLLECTIONS.FEEDS).doc(feedId).get();
+        if (!feedDoc.exists) {
+            return res.status(404).json(
+                createResponse(false, null, 'Lote de alimento no encontrado', 'FEED_NOT_FOUND')
+            );
+        }
+
+        const feedData = feedDoc.data();
+        if (feedData.userId !== userId) {
+            return res.status(403).json(
+                createResponse(false, null, 'No tienes permisos para editar este lote', 'PERMISSION_DENIED')
+            );
+        }
+
+        const updateData = {
+            ...req.body,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        };
+
+        await db.collection(COLLECTIONS.FEEDS).doc(feedId).update(updateData);
+        logger.info('Lote de alimento actualizado exitosamente', { feedId });
+        
+        res.json(createResponse(true, {
+            id: feedId,
+            ...updateData
+        }, 'Lote de alimento actualizado exitosamente'));
+
+    } catch (error) {
+        logger.error('Error actualizando lote de alimento', error);
+        res.status(500).json(createResponse(false, null, 'Error al actualizar lote de alimento', error.message));
+    }
+});
+
+// Eliminar lote de alimento
+app.delete('/feeds/:id', authenticate, async (req, res) => {
+    try {
+        const userId = req.user.uid;
+        const feedId = req.params.id;
+        
+        const feedDoc = await db.collection(COLLECTIONS.FEEDS).doc(feedId).get();
+        if (!feedDoc.exists) {
+            return res.status(404).json(
+                createResponse(false, null, 'Lote de alimento no encontrado', 'FEED_NOT_FOUND')
+            );
+        }
+
+        const feedData = feedDoc.data();
+        if (feedData.userId !== userId) {
+            return res.status(403).json(
+                createResponse(false, null, 'No tienes permisos para eliminar este lote', 'PERMISSION_DENIED')
+            );
+        }
+
+        await db.collection(COLLECTIONS.FEEDS).doc(feedId).delete();
+        logger.info('Lote de alimento eliminado exitosamente', { feedId });
+        
+        res.json(createResponse(true, null, 'Lote de alimento eliminado exitosamente'));
+
+    } catch (error) {
+        logger.error('Error eliminando lote de alimento', error);
+        res.status(500).json(createResponse(false, null, 'Error al eliminar lote de alimento', error.message));
     }
 });
 
 // ==================== GESTIÓN DE INVENTARIO ====================
-
-
 
 app.get('/inventory', authenticate, async (req, res) => {
     try {
@@ -952,7 +1158,6 @@ app.get('/inventory', authenticate, async (req, res) => {
     }
 });
 
-
 // Obtener un item específico del inventario
 app.get('/inventory/:id', authenticate, async (req, res) => {
     try {
@@ -984,6 +1189,68 @@ app.get('/inventory/:id', authenticate, async (req, res) => {
     } catch (error) {
         logger.error('Error obteniendo item de inventario:', error);
         res.status(500).json(createResponse(false, null, 'Error al obtener item de inventario', error.message));
+    }
+});
+
+// Agregar item al inventario
+app.post('/inventory', authenticate, async (req, res) => {
+    try {
+        const userId = req.user.uid;
+        const {
+            itemName,
+            category,
+            item_type,
+            currentStock,
+            minStock,
+            unit,
+            price,
+            supplier,
+            notes
+        } = req.body;
+
+        logger.info('Agregando item al inventario', { itemName, category, userId });
+
+        // Validaciones
+        if (!itemName) {
+            return res.status(400).json(
+                createResponse(false, null, 'Nombre del item es obligatorio', 'MISSING_ITEM_NAME')
+            );
+        }
+
+        // Usar item_type si category no está presente
+        const finalCategory = category || item_type;
+
+        if (!finalCategory) {
+            return res.status(400).json(
+                createResponse(false, null, 'Categoría del item es obligatoria', 'MISSING_CATEGORY')
+            );
+        }
+
+        const inventoryData = {
+            userId,
+            itemName,
+            category: finalCategory,
+            currentStock: parseFloat(currentStock) || 0,
+            minStock: parseFloat(minStock) || 0,
+            unit: unit || 'unidad',
+            price: price ? parseFloat(price) : 0,
+            supplier: supplier || '',
+            notes: notes || '',
+            lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
+            createdAt: admin.firestore.FieldValue.serverTimestamp()
+        };
+
+        const inventoryRef = await db.collection(COLLECTIONS.INVENTORY).add(inventoryData);
+        logger.info('Item agregado al inventario exitosamente', { itemId: inventoryRef.id });
+
+        res.status(201).json(createResponse(true, {
+            id: inventoryRef.id,
+            ...inventoryData
+        }, 'Item agregado al inventario exitosamente'));
+
+    } catch (error) {
+        logger.error('Error agregando item al inventario', error);
+        res.status(500).json(createResponse(false, null, 'Error al agregar item al inventario', error.message));
     }
 });
 
@@ -1057,69 +1324,6 @@ app.delete('/inventory/:id', authenticate, async (req, res) => {
     }
 });
 
-
-// Agregar item al inventario
-app.post('/inventory', authenticate, async (req, res) => {
-    try {
-        const userId = req.user.uid;
-        const {
-            itemName,
-            category,
-            item_type,
-            currentStock,
-            minStock,
-            unit,
-            price,
-            supplier,
-            notes
-        } = req.body;
-
-        logger.info('Agregando item al inventario', { itemName, category, userId });
-
-        // Validaciones
-        if (!itemName) {
-            return res.status(400).json(
-                createResponse(false, null, 'Nombre del item es obligatorio', 'MISSING_ITEM_NAME')
-            );
-        }
-
-        // Usar item_type si category no está presente
-        const finalCategory = category || item_type;
-
-        if (!finalCategory) {
-            return res.status(400).json(
-                createResponse(false, null, 'Categoría del item es obligatoria', 'MISSING_CATEGORY')
-            );
-        }
-
-        const inventoryData = {
-            userId,
-            itemName,
-            category: finalCategory,
-            currentStock: parseFloat(currentStock) || 0,
-            minStock: parseFloat(minStock) || 0,
-            unit: unit || 'unidad',
-            price: price ? parseFloat(price) : 0,
-            supplier: supplier || '',
-            notes: notes || '',
-            lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
-            createdAt: admin.firestore.FieldValue.serverTimestamp()
-        };
-
-        const inventoryRef = await db.collection(COLLECTIONS.INVENTORY).add(inventoryData);
-        logger.info('Item agregado al inventario exitosamente', { itemId: inventoryRef.id });
-
-        res.status(201).json(createResponse(true, {
-            id: inventoryRef.id,
-            ...inventoryData
-        }, 'Item agregado al inventario exitosamente'));
-
-    } catch (error) {
-        logger.error('Error agregando item al inventario', error);
-        res.status(500).json(createResponse(false, null, 'Error al agregar item al inventario', error.message));
-    }
-});
-
 // Actualizar stock del inventario
 app.put('/inventory/:id/stock', authenticate, async (req, res) => {
     try {
@@ -1173,6 +1377,188 @@ app.put('/inventory/:id/stock', authenticate, async (req, res) => {
     } catch (error) {
         logger.error('Error actualizando stock', error);
         res.status(500).json(createResponse(false, null, 'Error al actualizar stock', error.message));
+    }
+});
+
+// ==================== GESTIÓN DE COMPRAS ====================
+
+// Obtener compras
+app.get('/purchases', authenticate, async (req, res) => {
+    try {
+        const userId = req.user.uid;
+        const { page = 1, limit = 50, type, startDate, endDate } = req.query;
+
+        let query = db.collection(COLLECTIONS.PURCHASES).where('userId', '==', userId);
+
+        // Aplicar filtros
+        if (type) query = query.where('type', '==', type);
+        if (startDate || endDate) {
+            query = query.orderBy('purchaseDate');
+        } else {
+            query = query.orderBy('purchaseDate', 'desc');
+        }
+
+        const snapshot = await query.get();
+        let purchases = snapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                ...data,
+                purchaseDate: data.purchaseDate?.toDate?.() || data.purchaseDate,
+                createdAt: data.createdAt?.toDate?.() || null
+            };
+        });
+
+        // Filtrar por fecha si se proporciona
+        if (startDate) {
+            purchases = purchases.filter(p => new Date(p.purchaseDate) >= new Date(startDate));
+        }
+        if (endDate) {
+            purchases = purchases.filter(p => new Date(p.purchaseDate) <= new Date(endDate));
+        }
+
+        // Paginación
+        const startIndex = (page - 1) * limit;
+        const endIndex = startIndex + parseInt(limit);
+        const paginatedPurchases = purchases.slice(startIndex, endIndex);
+
+        res.json(createResponse(true, {
+            purchases: paginatedPurchases,
+            pagination: {
+                currentPage: parseInt(page),
+                totalPages: Math.ceil(purchases.length / limit),
+                totalPurchases: purchases.length,
+                hasNext: endIndex < purchases.length,
+                hasPrev: startIndex > 0
+            }
+        }, 'Compras obtenidas exitosamente'));
+
+    } catch (error) {
+        logger.error('Error obteniendo compras', error);
+        res.status(500).json(createResponse(false, null, 'Error al obtener compras', error.message));
+    }
+});
+
+// Registrar nueva compra
+app.post('/purchases', authenticate, async (req, res) => {
+    try {
+        const userId = req.user.uid;
+        const {
+            itemName,
+            type,
+            quantity,
+            unit,
+            unitCost,
+            totalCost,
+            purchaseDate,
+            supplier,
+            notes
+        } = req.body;
+
+        logger.info('Registrando nueva compra', { itemName, type, userId });
+
+        // Validaciones
+        if (!itemName || !type || !totalCost) {
+            return res.status(400).json(
+                createResponse(false, null, 'Nombre, tipo y costo total son obligatorios', 'MISSING_REQUIRED_FIELDS')
+            );
+        }
+
+        const purchaseData = {
+            userId,
+            itemName,
+            type,
+            quantity: quantity ? parseFloat(quantity) : 1,
+            unit: unit || 'unidad',
+            unitCost: unitCost ? parseFloat(unitCost) : parseFloat(totalCost),
+            totalCost: parseFloat(totalCost),
+            purchaseDate: purchaseDate || new Date().toISOString().split('T')[0],
+            supplier: supplier || '',
+            notes: notes || '',
+            createdAt: admin.firestore.FieldValue.serverTimestamp()
+        };
+
+        const purchaseRef = await db.collection(COLLECTIONS.PURCHASES).add(purchaseData);
+        logger.info('Compra registrada exitosamente', { purchaseId: purchaseRef.id });
+
+        res.status(201).json(createResponse(true, {
+            id: purchaseRef.id,
+            ...purchaseData
+        }, 'Compra registrada exitosamente'));
+
+    } catch (error) {
+        logger.error('Error registrando compra', error);
+        res.status(500).json(createResponse(false, null, 'Error al registrar compra', error.message));
+    }
+});
+
+// Actualizar compra
+app.put('/purchases/:id', authenticate, async (req, res) => {
+    try {
+        const userId = req.user.uid;
+        const purchaseId = req.params.id;
+        
+        const purchaseDoc = await db.collection(COLLECTIONS.PURCHASES).doc(purchaseId).get();
+        if (!purchaseDoc.exists) {
+            return res.status(404).json(
+                createResponse(false, null, 'Compra no encontrada', 'PURCHASE_NOT_FOUND')
+            );
+        }
+
+        const purchaseData = purchaseDoc.data();
+        if (purchaseData.userId !== userId) {
+            return res.status(403).json(
+                createResponse(false, null, 'No tienes permisos para editar esta compra', 'PERMISSION_DENIED')
+            );
+        }
+
+        const updateData = {
+            ...req.body,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        };
+
+        await db.collection(COLLECTIONS.PURCHASES).doc(purchaseId).update(updateData);
+        logger.info('Compra actualizada exitosamente', { purchaseId });
+        
+        res.json(createResponse(true, {
+            id: purchaseId,
+            ...updateData
+        }, 'Compra actualizada exitosamente'));
+
+    } catch (error) {
+        logger.error('Error actualizando compra', error);
+        res.status(500).json(createResponse(false, null, 'Error al actualizar compra', error.message));
+    }
+});
+
+// Eliminar compra
+app.delete('/purchases/:id', authenticate, async (req, res) => {
+    try {
+        const userId = req.user.uid;
+        const purchaseId = req.params.id;
+        
+        const purchaseDoc = await db.collection(COLLECTIONS.PURCHASES).doc(purchaseId).get();
+        if (!purchaseDoc.exists) {
+            return res.status(404).json(
+                createResponse(false, null, 'Compra no encontrada', 'PURCHASE_NOT_FOUND')
+            );
+        }
+
+        const purchaseData = purchaseDoc.data();
+        if (purchaseData.userId !== userId) {
+            return res.status(403).json(
+                createResponse(false, null, 'No tienes permisos para eliminar esta compra', 'PERMISSION_DENIED')
+            );
+        }
+
+        await db.collection(COLLECTIONS.PURCHASES).doc(purchaseId).delete();
+        logger.info('Compra eliminada exitosamente', { purchaseId });
+        
+        res.json(createResponse(true, null, 'Compra eliminada exitosamente'));
+
+    } catch (error) {
+        logger.error('Error eliminando compra', error);
+        res.status(500).json(createResponse(false, null, 'Error al eliminar compra', error.message));
     }
 });
 
