@@ -222,22 +222,25 @@ findPurchasesArray(obj) {
         this.app.showAlert('Error al registrar compra: ' + error.message, 'danger');
     }
 }
-    async deletePurchase(purchaseId) {
+    
+async deletePurchase(purchaseId) {
     if (!confirm('¿Estás seguro de que quieres eliminar esta compra?')) {
         return;
     }
 
     try {
         this.app.showLoading(true);
-        await this.app.apiCall(`/purchases/${purchaseId}`, 'DELETE');
         
-        // ✅ CORREGIDO: Usar showAlert
+        
+        await this.app.apiCall(`/purchases/${purchaseId}`, { 
+            method: 'DELETE' 
+        });
+        
         this.app.showAlert('Compra eliminada exitosamente', 'success');
         await this.loadPurchases();
         
     } catch (error) {
         console.error('Error deleting purchase:', error);
-        // ✅ CORREGIDO: Usar showAlert
         this.app.showAlert('Error al eliminar compra: ' + error.message, 'danger');
     } finally {
         this.app.showLoading(false);
