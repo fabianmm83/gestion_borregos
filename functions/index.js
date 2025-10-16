@@ -2,10 +2,6 @@ const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 const express = require('express');
 const cors = require('cors');
-const rateLimit = require('express-rate-limit');
-const helmet = require('helmet');
-const compression = require('compression');
-const Joi = require('joi');
 
 // Inicializar Firebase Admin
 admin.initializeApp();
@@ -19,48 +15,12 @@ db.settings({
 
 const app = express();
 
-// ==================== CONFIGURACIONES DE SEGURIDAD Y OPTIMIZACIÓN ====================
+// ==================== CONFIGURACIONES DE SEGURIDAD ====================
 
-// Configurar Helmet para seguridad
-app.use(helmet({
-    crossOriginResourcePolicy: { policy: "cross-origin" }
-}));
+// Configuración de CORS
+app.use(cors({ origin: true }));
 
-// Compresión GZIP
-app.use(compression());
-
-// Rate Limiting mejorado
-const generalLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutos
-    max: 1000, // límite de 1000 requests por ventana
-    message: {
-        error: 'Demasiadas solicitudes desde esta IP',
-        retryAfter: '15 minutos'
-    },
-    standardHeaders: true,
-    legacyHeaders: false
-});
-
-const authLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 10, // límite más estricto para autenticación
-    message: {
-        error: 'Demasiados intentos de autenticación',
-        retryAfter: '15 minutos'
-    }
-});
-
-// Aplicar rate limiting
-app.use(generalLimiter);
-app.use('/auth/', authLimiter);
-
-// Configuración mejorada de CORS
-app.use(cors({ 
-    origin: true,
-    credentials: true 
-}));
-
-// Headers de seguridad adicionales
+// Headers de seguridad
 app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
@@ -75,7 +35,7 @@ app.use((req, res, next) => {
     next();
 });
 
-// Middleware para parsear JSON con límite de tamaño
+// Middleware para parsear JSON
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
@@ -123,7 +83,7 @@ const logger = {
 
 // ==================== MIDDLEWARE MEJORADO ====================
 
-// Middleware de autenticación mejorado
+// Middleware de autenticación
 const authenticate = async (req, res, next) => {
     try {
         const token = req.headers.authorization?.replace('Bearer ', '');
@@ -137,132 +97,15 @@ const authenticate = async (req, res, next) => {
         const decodedToken = await admin.auth().verifyIdToken(token);
         req.user = decodedToken;
         
-        // Log de autenticación exitosa
         logger.info(`Usuario autenticado: ${decodedToken.email}`, { uid: decodedToken.uid });
-        
         next();
     } catch (error) {
         logger.error('Error en autenticación', error);
-        
         const errorCode = error.code === 'auth/id-token-expired' ? 'TOKEN_EXPIRED' : 'INVALID_TOKEN';
-        
         return res.status(401).json(
             createResponse(false, null, 'Token inválido o expirado', errorCode)
         );
     }
-};
-
-// Middleware de validación de rol de administrador
-const requireAdmin = async (req, res, next) => {
-    try {
-        const userDoc = await db.collection(COLLECTIONS.USERS).doc(req.user.uid).get();
-        
-        if (!userDoc.exists) {
-            return res.status(403).json(
-                createResponse(false, null, 'Usuario no encontrado', 'USER_NOT_FOUND')
-            );
-        }
-
-        const userData = userDoc.data();
-        
-        if (userData.role !== 'admin') {
-            return res.status(403).json(
-                createResponse(false, null, 'Se requieren permisos de administrador', 'INSUFFICIENT_PERMISSIONS')
-            );
-        }
-
-        next();
-    } catch (error) {
-        logger.error('Error verificando rol de administrador', error);
-        return res.status(500).json(
-            createResponse(false, null, 'Error interno del servidor', 'SERVER_ERROR')
-        );
-    }
-};
-
-// Middleware de validación de datos de entrada
-const validateRequest = (schema) => {
-    return (req, res, next) => {
-        try {
-            const { error, value } = schema.validate(req.body);
-            
-            if (error) {
-                return res.status(400).json(
-                    createResponse(false, null, 'Datos de entrada inválidos', {
-                        details: error.details.map(detail => detail.message)
-                    })
-                );
-            }
-            
-            // Reemplazar el body con los datos validados
-            req.body = value;
-            next();
-        } catch (validationError) {
-            logger.error('Error en validación de datos', validationError);
-            return res.status(500).json(
-                createResponse(false, null, 'Error en validación de datos', 'VALIDATION_ERROR')
-            );
-        }
-    };
-};
-
-// ==================== ESQUEMAS DE VALIDACIÓN ====================
-
-const validationSchemas = {
-    createAdmin: Joi.object({
-        email: Joi.string().email().required(),
-        name: Joi.string().min(2).max(100).optional(),
-        uid: Joi.string().optional()
-    }),
-
-    animal: Joi.object({
-        name: Joi.string().max(100).optional(),
-        earTag: Joi.string().max(50).required(),
-        breed: Joi.string().max(100).required(),
-        birthDate: Joi.string().isoDate().optional(),
-        weight: Joi.number().min(0).max(1000).optional(),
-        gender: Joi.string().valid('male', 'female', 'unknown').optional(),
-        status: Joi.string().valid(...Object.values(ANIMAL_STATUS)).optional(),
-        notes: Joi.string().max(1000).optional()
-    }),
-
-    sale: Joi.object({
-        animalEarTag: Joi.string().max(50).required(),
-        animalName: Joi.string().max(100).optional(),
-        saleDate: Joi.string().isoDate().optional(),
-        buyerName: Joi.string().max(100).optional(),
-        buyerContact: Joi.string().max(100).optional(),
-        salePrice: Joi.number().min(0).required(),
-        weightAtSale: Joi.number().min(0).max(1000).optional(),
-        notes: Joi.string().max(1000).optional()
-    }),
-
-    feed: Joi.object({
-        feedType: Joi.string().max(100).required(),
-        quantity: Joi.number().min(0).required(),
-        unit: Joi.string().max(20).optional(),
-        feedingDate: Joi.string().isoDate().optional(),
-        animalEarTag: Joi.string().max(50).optional(),
-        notes: Joi.string().max(1000).optional()
-    }),
-
-    inventory: Joi.object({
-        itemName: Joi.string().max(100).required(),
-        category: Joi.string().max(100).optional(),
-        item_type: Joi.string().max(100).optional(),
-        currentStock: Joi.number().min(0).required(),
-        minStock: Joi.number().min(0).optional(),
-        unit: Joi.string().max(20).optional(),
-        price: Joi.number().min(0).optional(),
-        supplier: Joi.string().max(100).optional(),
-        notes: Joi.string().max(1000).optional()
-    }),
-
-    inventoryStock: Joi.object({
-        newStock: Joi.number().min(0).optional(),
-        operation: Joi.string().valid('set', 'add', 'subtract').optional(),
-        quantity: Joi.number().min(0).optional()
-    })
 };
 
 // ==================== ENDPOINTS PÚBLICOS ====================
@@ -298,19 +141,23 @@ app.get('/health', (req, res) => {
     res.json(createResponse(true, {
         status: 'OK',
         serverTime: new Date().toISOString(),
-        uptime: process.uptime(),
-        memory: process.memoryUsage(),
         environment: process.env.NODE_ENV || 'development'
     }, 'Sistema funcionando correctamente'));
 });
 
-// ==================== ENDPOINTS DE AUTENTICACIÓN MEJORADOS ====================
+// ==================== ENDPOINTS DE AUTENTICACIÓN ====================
 
-app.post('/auth/create-admin', validateRequest(validationSchemas.createAdmin), async (req, res) => {
+app.post('/auth/create-admin', async (req, res) => {
     try {
         const { email, name, uid } = req.body;
 
         logger.info('Solicitud de creación de administrador', { email, name });
+
+        if (!email) {
+            return res.status(400).json(
+                createResponse(false, null, 'Email es requerido', 'MISSING_EMAIL')
+            );
+        }
 
         let userId = uid;
         
@@ -321,7 +168,7 @@ app.post('/auth/create-admin', validateRequest(validationSchemas.createAdmin), a
                     email,
                     displayName: name,
                     emailVerified: true,
-                    password: Math.random().toString(36).slice(-12) + 'A1!' // Contraseña más segura
+                    password: Math.random().toString(36).slice(-12) + 'A1!'
                 });
                 userId = userRecord.uid;
                 logger.info('Usuario creado en Firebase Auth', { userId });
@@ -403,9 +250,9 @@ app.post('/auth/verify', async (req, res) => {
     }
 });
 
-// ==================== ENDPOINT DE INICIALIZACIÓN MEJORADO ====================
+// ==================== ENDPOINT DE INICIALIZACIÓN ====================
 
-app.post('/initialize', authenticate, requireAdmin, async (req, res) => {
+app.post('/initialize', authenticate, async (req, res) => {
     try {
         const userId = req.user.uid;
         
@@ -453,13 +300,13 @@ app.post('/initialize', authenticate, requireAdmin, async (req, res) => {
     }
 });
 
-// ==================== ENDPOINTS DEL DASHBOARD MEJORADOS ====================
+// ==================== ENDPOINTS DEL DASHBOARD ====================
 
 app.get('/dashboard', authenticate, async (req, res) => {
     try {
         const userId = req.user.uid;
         
-        // Ejecutar todas las consultas en paralelo para mejor rendimiento
+        // Ejecutar consultas en paralelo para mejor rendimiento
         const [
             animalsSnapshot,
             salesSnapshot,
@@ -511,13 +358,6 @@ app.get('/dashboard', authenticate, async (req, res) => {
                 low_stock_alerts: inventoryData
                     .filter(item => item.currentStock <= item.minStock)
                     .slice(0, 5)
-            },
-            charts: {
-                animals_by_status: Object.values(ANIMAL_STATUS).reduce((acc, status) => {
-                    acc[status] = animalsData.filter(animal => animal.status === status).length;
-                    return acc;
-                }, {}),
-                monthly_sales: calculateMonthlySales(salesData)
             }
         };
 
@@ -529,37 +369,13 @@ app.get('/dashboard', authenticate, async (req, res) => {
     }
 });
 
-// Función auxiliar para calcular ventas mensuales
-function calculateMonthlySales(salesData) {
-    const monthlySales = {};
-    
-    salesData.forEach(sale => {
-        const saleDate = new Date(sale.saleDate);
-        const monthKey = `${saleDate.getFullYear()}-${String(saleDate.getMonth() + 1).padStart(2, '0')}`;
-        
-        if (!monthlySales[monthKey]) {
-            monthlySales[monthKey] = 0;
-        }
-        
-        monthlySales[monthKey] += sale.salePrice || 0;
-    });
-    
-    return monthlySales;
-}
+// ==================== GESTIÓN DE ANIMALES ====================
 
-// ==================== GESTIÓN DE ANIMALES MEJORADA ====================
-
-// Obtener animales con paginación y filtros
+// Obtener animales
 app.get('/animals', authenticate, async (req, res) => {
     try {
         const userId = req.user.uid;
-        const { 
-            page = 1, 
-            limit = 50, 
-            status, 
-            breed,
-            search 
-        } = req.query;
+        const { page = 1, limit = 50, status, breed, search } = req.query;
 
         let query = db.collection(COLLECTIONS.ANIMALS).where('userId', '==', userId);
 
@@ -567,7 +383,7 @@ app.get('/animals', authenticate, async (req, res) => {
         if (status) query = query.where('status', '==', status);
         if (breed) query = query.where('breed', '==', breed);
 
-        // Ordenar y paginar
+        // Ordenar
         query = query.orderBy('createdAt', 'desc');
 
         const snapshot = await query.get();
@@ -578,7 +394,7 @@ app.get('/animals', authenticate, async (req, res) => {
             updatedAt: doc.data().updatedAt?.toDate?.() || null
         }));
 
-        // Aplicar búsqueda en memoria (para campos de texto)
+        // Aplicar búsqueda
         if (search) {
             const searchLower = search.toLowerCase();
             animals = animals.filter(animal => 
@@ -645,7 +461,7 @@ app.get('/animals/:id', authenticate, async (req, res) => {
 });
 
 // Agregar nuevo animal
-app.post('/animals', authenticate, validateRequest(validationSchemas.animal), async (req, res) => {
+app.post('/animals', authenticate, async (req, res) => {
     try {
         const userId = req.user.uid;
         const {
@@ -660,6 +476,13 @@ app.post('/animals', authenticate, validateRequest(validationSchemas.animal), as
         } = req.body;
 
         logger.info('Agregando nuevo animal', { earTag, breed, userId });
+
+        // Validaciones básicas
+        if (!earTag || !breed) {
+            return res.status(400).json(
+                createResponse(false, null, 'Número de arete y raza son obligatorios', 'MISSING_REQUIRED_FIELDS')
+            );
+        }
 
         // Verificar si ya existe un animal con el mismo número de arete
         const existingAnimal = await db.collection(COLLECTIONS.ANIMALS)
@@ -702,7 +525,7 @@ app.post('/animals', authenticate, validateRequest(validationSchemas.animal), as
 });
 
 // Actualizar animal
-app.put('/animals/:id', authenticate, validateRequest(validationSchemas.animal), async (req, res) => {
+app.put('/animals/:id', authenticate, async (req, res) => {
     try {
         const userId = req.user.uid;
         const animalId = req.params.id;
@@ -773,9 +596,9 @@ app.delete('/animals/:id', authenticate, async (req, res) => {
     }
 });
 
-// ==================== GESTIÓN DE VENTAS MEJORADA ====================
+// ==================== GESTIÓN DE VENTAS ====================
 
-// Obtener ventas con paginación
+// Obtener ventas
 app.get('/sales', authenticate, async (req, res) => {
     try {
         const userId = req.user.uid;
@@ -831,7 +654,7 @@ app.get('/sales', authenticate, async (req, res) => {
 });
 
 // Registrar nueva venta
-app.post('/sales', authenticate, validateRequest(validationSchemas.sale), async (req, res) => {
+app.post('/sales', authenticate, async (req, res) => {
     try {
         const userId = req.user.uid;
         const {
@@ -846,6 +669,19 @@ app.post('/sales', authenticate, validateRequest(validationSchemas.sale), async 
         } = req.body;
 
         logger.info('Registrando nueva venta', { animalEarTag, salePrice, userId });
+
+        // Validaciones
+        if (!animalEarTag) {
+            return res.status(400).json(
+                createResponse(false, null, 'Número de arete del animal es obligatorio', 'MISSING_EAR_TAG')
+            );
+        }
+
+        if (!salePrice || salePrice <= 0) {
+            return res.status(400).json(
+                createResponse(false, null, 'Precio de venta válido es obligatorio', 'INVALID_SALE_PRICE')
+            );
+        }
 
         // Buscar animal por arete
         let animalId = null;
@@ -939,9 +775,9 @@ app.delete('/sales/:id', authenticate, async (req, res) => {
     }
 });
 
-// ==================== CONTROL DE ALIMENTOS MEJORADO ====================
+// ==================== CONTROL DE ALIMENTOS ====================
 
-// Obtener alimentos con paginación
+// Obtener alimentos
 app.get('/feeds', authenticate, async (req, res) => {
     try {
         const userId = req.user.uid;
@@ -994,7 +830,7 @@ app.get('/feeds', authenticate, async (req, res) => {
 });
 
 // Registrar alimentación
-app.post('/feeds', authenticate, validateRequest(validationSchemas.feed), async (req, res) => {
+app.post('/feeds', authenticate, async (req, res) => {
     try {
         const userId = req.user.uid;
         const {
@@ -1007,6 +843,13 @@ app.post('/feeds', authenticate, validateRequest(validationSchemas.feed), async 
         } = req.body;
 
         logger.info('Registrando nueva alimentación', { feedType, quantity, userId });
+
+        // Validaciones
+        if (!feedType || !quantity) {
+            return res.status(400).json(
+                createResponse(false, null, 'Tipo y cantidad de alimento son obligatorios', 'MISSING_REQUIRED_FIELDS')
+            );
+        }
 
         const feedData = {
             userId,
@@ -1053,9 +896,9 @@ app.post('/feeds', authenticate, validateRequest(validationSchemas.feed), async 
     }
 });
 
-// ==================== GESTIÓN DE INVENTARIO MEJORADA ====================
+// ==================== GESTIÓN DE INVENTARIO ====================
 
-// Obtener inventario con paginación
+// Obtener inventario
 app.get('/inventory', authenticate, async (req, res) => {
     try {
         const userId = req.user.uid;
@@ -1100,7 +943,7 @@ app.get('/inventory', authenticate, async (req, res) => {
 });
 
 // Agregar item al inventario
-app.post('/inventory', authenticate, validateRequest(validationSchemas.inventory), async (req, res) => {
+app.post('/inventory', authenticate, async (req, res) => {
     try {
         const userId = req.user.uid;
         const {
@@ -1117,8 +960,21 @@ app.post('/inventory', authenticate, validateRequest(validationSchemas.inventory
 
         logger.info('Agregando item al inventario', { itemName, category, userId });
 
+        // Validaciones
+        if (!itemName) {
+            return res.status(400).json(
+                createResponse(false, null, 'Nombre del item es obligatorio', 'MISSING_ITEM_NAME')
+            );
+        }
+
         // Usar item_type si category no está presente
         const finalCategory = category || item_type;
+
+        if (!finalCategory) {
+            return res.status(400).json(
+                createResponse(false, null, 'Categoría del item es obligatoria', 'MISSING_CATEGORY')
+            );
+        }
 
         const inventoryData = {
             userId,
@@ -1149,7 +1005,7 @@ app.post('/inventory', authenticate, validateRequest(validationSchemas.inventory
 });
 
 // Actualizar stock del inventario
-app.put('/inventory/:id/stock', authenticate, validateRequest(validationSchemas.inventoryStock), async (req, res) => {
+app.put('/inventory/:id/stock', authenticate, async (req, res) => {
     try {
         const userId = req.user.uid;
         const inventoryId = req.params.id;
@@ -1204,12 +1060,11 @@ app.put('/inventory/:id/stock', authenticate, validateRequest(validationSchemas.
     }
 });
 
-// ==================== MANEJO DE ERRORES GLOBAL MEJORADO ====================
+// ==================== MANEJO DE ERRORES ====================
 
 app.use((error, req, res, next) => {
     logger.error('Error no manejado', error);
 
-    // Clasificación de errores
     let statusCode = 500;
     let errorCode = 'INTERNAL_SERVER_ERROR';
     let message = 'Error interno del servidor';
@@ -1222,55 +1077,21 @@ app.use((error, req, res, next) => {
         statusCode = 401;
         errorCode = 'INVALID_TOKEN';
         message = 'Token inválido';
-    } else if (error.code === 'permission-denied') {
-        statusCode = 403;
-        errorCode = 'PERMISSION_DENIED';
-        message = 'Permiso denegado';
     }
 
     res.status(statusCode).json(createResponse(false, null, message, errorCode));
 });
 
-// ==================== MANEJO DE RUTAS NO ENCONTRADAS ====================
+// ==================== RUTAS NO ENCONTRADAS ====================
 
 app.use('*', (req, res) => {
     res.status(404).json(createResponse(false, null, 'Ruta no encontrada', {
         path: req.originalUrl,
-        method: req.method,
-        availableEndpoints: [
-            'GET    /',
-            'GET    /health',
-            'POST   /auth/create-admin',
-            'POST   /auth/verify',
-            'POST   /initialize',
-            'GET    /dashboard',
-            'GET    /animals',
-            'POST   /animals',
-            'GET    /animals/:id',
-            'PUT    /animals/:id',
-            'DELETE /animals/:id',
-            'GET    /sales',
-            'POST   /sales',
-            'DELETE /sales/:id',
-            'GET    /feeds',
-            'POST   /feeds',
-            'GET    /inventory',
-            'POST   /inventory',
-            'PUT    /inventory/:id/stock'
-        ]
+        method: req.method
     }));
 });
 
 // ==================== EXPORTACIÓN ====================
 
-exports.api = functions
-    .runWith({
-        timeoutSeconds: 60,
-        memory: '256MB'
-    })
-    .https.onRequest(app);
-
-// Exportar para testing
-if (process.env.NODE_ENV === 'development') {
-    module.exports = app;
-}
+// Exportación simplificada para compatibilidad
+exports.api = functions.https.onRequest(app);
