@@ -140,58 +140,34 @@ class PurchasesManager {
         }
     }
 
-    async handlePurchaseSubmit(form) {
-        try {
-            this.app.showLoading(true);
-            const formData = this.app.getFormData(form);
+    async handlePurchaseFormSubmit(formData) {
+    try {
+        console.log('📝 Datos del formulario de compra:', formData);
+        
+        // Asegurar que los campos numéricos sean números
+        const purchaseData = {
+            ...formData,
+            quantity: parseFloat(formData.quantity),
+            unitCost: formData.unitCost ? parseFloat(formData.unitCost) : 0,
+            totalCost: parseFloat(formData.totalCost)
+        };
 
-            console.log('📝 Datos del formulario de compra:', formData);
-
-            // Validaciones
-            if (!formData.itemName || !formData.totalCost) {
-                this.app.showAlert('Nombre del item y costo total son obligatorios', 'warning');
-                return;
-            }
-
-            if (parseFloat(formData.totalCost) <= 0) {
-                this.app.showAlert('El costo total debe ser mayor a 0', 'warning');
-                return;
-            }
-
-            // Preparar datos para la API
-            const purchaseData = {
-                itemName: formData.itemName,
-                type: formData.type || 'supplies',
-                quantity: formData.quantity ? parseInt(formData.quantity) : 1,
-                unit: formData.unit || 'unidad',
-                unitCost: formData.unitCost ? parseFloat(formData.unitCost) : 0,
-                totalCost: parseFloat(formData.totalCost),
-                purchaseDate: formData.purchaseDate || new Date().toISOString().split('T')[0],
-                supplier: formData.supplier || '',
-                notes: formData.notes || ''
-            };
-
-            console.log('🚀 Enviando a API:', purchaseData);
-
-            const result = await this.app.apiCall('/purchases', {
-                method: 'POST',
-                body: purchaseData
-            });
-
-            console.log('✅ Respuesta de API:', result);
-
-            this.app.showAlert('Compra registrada exitosamente', 'success');
-            
-            this.app.hideModal('purchase-form-modal');
-            await this.loadPurchases();
-
-        } catch (error) {
-            console.error('❌ Error saving purchase:', error);
-            this.app.showAlert('Error al registrar compra: ' + error.message, 'danger');
-        } finally {
-            this.app.showLoading(false);
-        }
+        console.log('📦 Enviando compra:', purchaseData);
+        
+        const response = await this.app.apiCall('/purchases', 'POST', purchaseData);
+        console.log('✅ Compra registrada:', response);
+        
+        // Cerrar modal y recargar lista
+        bootstrap.Modal.getInstance(document.getElementById('purchase-form-modal')).hide();
+        await this.loadPurchases();
+        
+        this.app.showSuccess('Compra registrada exitosamente');
+        
+    } catch (error) {
+        console.error('❌ Error registrando compra:', error);
+        this.app.showError('Error al registrar compra: ' + error.message);
     }
+}
 
     async deletePurchase(purchaseId) {
         if (!confirm('¿Estás seguro de que quieres eliminar esta compra?')) {
