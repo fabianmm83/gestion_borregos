@@ -21,7 +21,9 @@ class FeedsManager {
             this.app.showLoading(true);
             console.log('🔄 Cargando alimentación desde API...');
             
-            const feeds = await this.app.apiCall('/feeds');
+            const response = await this.app.apiCall('/feeds');
+            // CORRECCIÓN: La respuesta viene en response.data.feeds
+            const feeds = response.data?.feeds || [];
             console.log('✅ Alimentación cargada:', feeds);
             this.renderFeeds(feeds);
             
@@ -40,7 +42,7 @@ class FeedsManager {
             this.app.showLoading(false);
         }
     }
-
+    
     getDemoFeeds() {
         return [
             {

@@ -23,48 +23,24 @@ class SalesManager {
         }
     }
 
-    async loadSales() {
+     async loadSales() {
         try {
-            this.app.showLoading(true);
-            
             console.log('🔄 Cargando ventas...');
-            let sales = [];
+            app.showLoading(true);
             
-            // INTENTAR PRIMERO DESDE LOCALSTORAGE
-            const localData = this.getLocalSales();
-            if (localData.length > 0) {
-                console.log('📊 Usando datos locales de ventas');
-                sales = localData;
-                this.renderSales(sales);
-                this.updateStats(sales);
-            }
+            const response = await app.apiCall('/sales');
+            // CORRECCIÓN: La respuesta viene en response.data.sales
+            this.sales = response.data?.sales || [];
             
-            // LUEGO INTENTAR DESDE LA API (EN SEGUNDO PLANO)
-            try {
-                const apiSales = await this.app.apiCall('/sales');
-                console.log('✅ Ventas cargadas desde API:', apiSales.length);
-                
-                if (apiSales && apiSales.length > 0) {
-                    sales = apiSales;
-                    // Guardar en localStorage como respaldo
-                    this.saveLocalSales(sales);
-                }
-            } catch (apiError) {
-                console.warn('⚠️ Error al cargar desde API, continuando con datos locales:', apiError.message);
-                // No mostramos alerta para no molestar al usuario
-            }
-            
-            this.renderSales(sales);
-            this.updateStats(sales);
+            this.renderSales();
+            this.updateSalesStats();
+            console.log(`✅ ${this.sales.length} ventas cargadas`);
             
         } catch (error) {
-            console.error('Error loading sales:', error);
-            // Usar datos locales como último recurso
-            const localData = this.getLocalSales();
-            this.renderSales(localData);
-            this.updateStats(localData);
+            console.error('❌ Error loading sales:', error);
+            app.showAlert('Error al cargar ventas: ' + error.message, 'danger');
         } finally {
-            this.app.showLoading(false);
+            app.showLoading(false);
         }
     }
 

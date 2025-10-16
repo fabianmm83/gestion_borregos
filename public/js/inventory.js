@@ -34,7 +34,9 @@ class InventoryManager {
             this.app.showLoading(true);
             console.log('🔄 Cargando inventario desde API...');
             
-            const inventory = await this.app.apiCall('/inventory');
+            const response = await this.app.apiCall('/inventory');
+            // CORRECCIÓN: La respuesta viene en response.data.inventory
+            const inventory = response.data?.inventory || [];
             console.log('✅ Inventario cargado:', inventory);
             this.renderInventory(inventory);
             this.updateStats(inventory);

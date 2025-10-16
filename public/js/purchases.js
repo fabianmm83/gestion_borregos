@@ -19,12 +19,13 @@ class PurchasesManager {
     async loadPurchases() {
         try {
             this.app.showLoading(true);
-            const purchases = await this.app.apiCall('/purchases');
-            this.renderPurchases(purchases);
-            this.updateStats(purchases);
+            // TEMPORAL: Mostrar mensaje de que no está implementado
+            this.renderPurchases([]);
+            this.app.showAlert('Módulo de compras no implementado aún', 'info');
+            
         } catch (error) {
             console.error('Error loading purchases:', error);
-            // Manejar error
+            this.app.showAlert('Error al cargar compras: ' + error.message, 'danger');
         } finally {
             this.app.showLoading(false);
         }
@@ -34,47 +35,48 @@ class PurchasesManager {
         const container = document.getElementById('purchases-list');
         if (!container) return;
 
-        if (!purchases || purchases.length === 0) {
-            container.innerHTML = this.getEmptyState();
-            return;
-        }
-
-        container.innerHTML = purchases.map(purchase => `
-            <div class="card mb-3">
-                <div class="card-body">
-                    <div class="row">
-                        <div class="col-md-8">
-                            <h5 class="card-title">
-                                <i class="fas fa-shopping-cart me-2"></i>${purchase.itemName}
-                            </h5>
-                            <p class="card-text mb-1">
-                                <strong>Tipo:</strong> ${this.getTypeText(purchase.type)}
-                            </p>
-                            <p class="card-text mb-1">
-                                <strong>Cantidad:</strong> ${purchase.quantity} ${purchase.unit}
-                            </p>
-                            <p class="card-text mb-1">
-                                <strong>Precio:</strong> $${parseFloat(purchase.price).toLocaleString()}
-                            </p>
-                            <p class="card-text mb-1">
-                                <strong>Proveedor:</strong> ${purchase.supplier || 'N/A'}
-                            </p>
-                            <p class="card-text mb-1">
-                                <strong>Fecha:</strong> ${new Date(purchase.date).toLocaleDateString()}
-                            </p>
-                        </div>
-                        <div class="col-md-4 text-end">
-                            <button class="btn btn-sm btn-outline-danger" onclick="purchasesManager.deletePurchase('${purchase.id}')">
-                                <i class="fas fa-trash"></i> Eliminar
-                            </button>
-                        </div>
-                    </div>
-                </div>
+        container.innerHTML = `
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle me-2"></i>
+                Módulo de compras en desarrollo.
+                <button class="btn btn-primary btn-sm ms-2" onclick="purchasesManager.showPurchaseForm()">
+                    <i class="fas fa-plus me-1"></i>Agregar Compra
+                </button>
             </div>
-        `).join('');
+        `;
     }
 
-    // Resto de métodos para purchases...
+    showPurchaseForm() {
+        this.app.showAlert('Funcionalidad en desarrollo', 'info');
+    }
+
+    async handlePurchaseSubmit(e) {
+        e.preventDefault();
+        this.app.showAlert('Funcionalidad en desarrollo', 'info');
+    }
+
+    getEmptyState() {
+        return `
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle me-2"></i>
+                No hay compras registradas.
+                <button class="btn btn-primary btn-sm ms-2" onclick="purchasesManager.showPurchaseForm()">
+                    <i class="fas fa-plus me-1"></i>Registrar Primera Compra
+                </button>
+            </div>
+        `;
+    }
+
+    getTypeText(type) {
+        const texts = {
+            'medicine': 'Medicina',
+            'equipment': 'Equipo',
+            'supplies': 'Insumos',
+            'tools': 'Herramientas',
+            'other': 'Otro'
+        };
+        return texts[type] || type;
+    }
 }
 
 // Inicialización
