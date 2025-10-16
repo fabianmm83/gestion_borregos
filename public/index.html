@@ -1018,5 +1018,55 @@
     <script src="./js/inventory.js"></script>
     <script src="./js/purchases.js"></script>
     <script src="./js/reports.js"></script>
+
+    <!-- Script de inicialización garantizada -->
+<script>
+// Inicialización garantizada de managers
+function initializeAppManagers() {
+    console.log('🚀 Inicializando managers de la aplicación...');
+    
+    if (window.app) {
+        // Verificar y crear managers si no existen
+        if (!window.animalsManager) {
+            window.animalsManager = new AnimalsManager(window.app);
+            console.log('✅ AnimalsManager inicializado');
+        }
+        if (!window.salesManager) {
+            window.salesManager = new SalesManager(window.app);
+            console.log('✅ SalesManager inicializado');
+        }
+        if (!window.feedsManager) {
+            window.feedsManager = new FeedsManager(window.app);
+            console.log('✅ FeedsManager inicializado');
+        }
+        if (!window.inventoryManager) {
+            window.inventoryManager = new InventoryManager(window.app);
+            console.log('✅ InventoryManager inicializado');
+        }
+        if (!window.purchasesManager) {
+            window.purchasesManager = new PurchasesManager(window.app);
+            console.log('✅ PurchasesManager inicializado');
+        }
+        if (!window.reportsManager) {
+            window.reportsManager = new ReportsManager(window.app);
+            console.log('✅ ReportsManager inicializado');
+        }
+    } else {
+        console.log('⏳ App no está lista, reintentando...');
+        setTimeout(initializeAppManagers, 500);
+    }
+}
+
+// Inicializar cuando todo esté cargado
+window.addEventListener('load', function() {
+    console.log('🎯 Página completamente cargada');
+    setTimeout(initializeAppManagers, 1000);
+});
+
+// También inicializar si se detecta que app está lista después
+if (window.app) {
+    initializeAppManagers();
+}
+</script>
 </body>
 </html>

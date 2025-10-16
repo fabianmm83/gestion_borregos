@@ -272,76 +272,90 @@ class App {
     // ==================== COMUNICACIÓN CON API ====================
 
     async apiCall(endpoint, options = {}) {
-        try {
-            const token = localStorage.getItem('authToken');
-            const config = {
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...options.headers
-                },
-                ...options
-            };
+    try {
+        const token = localStorage.getItem('authToken');
+        const config = {
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            },
+            ...options
+        };
 
-            // Agregar token de autenticación si existe y no es endpoint público
-            if (token && !endpoint.includes('/auth/') && endpoint !== '/health') {
-                config.headers['Authorization'] = `Bearer ${token}`;
-            }
-
-            if (config.body && typeof config.body === 'object') {
-                config.body = JSON.stringify(config.body);
-            }
-
-            console.log('🌐 API Call:', endpoint, config);
-
-            const response = await fetch(`${this.API_BASE_URL}${endpoint}`, config);
-
-            if (response.status === 401) {
-                // Token inválido, redirigir a login
-                this.showLogin();
-                throw new Error('Sesión expirada');
-            }
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`Error ${response.status}: ${errorText || response.statusText}`);
-            }
-
-            const result = await response.json();
-            console.log('✅ API Response:', result);
-            return result;
-
-        } catch (error) {
-            console.error('❌ API Call error:', error);
-            
-            // No mostrar alerta para errores de autenticación (ya se manejan arriba)
-            if (!error.message.includes('Sesión expirada')) {
-                this.showAlert('Error en la conexión: ' + error.message, 'danger');
-            }
-            
-            throw error;
+        // Agregar token de autenticación si existe y no es endpoint público
+        if (token && !endpoint.includes('/auth/') && endpoint !== '/health') {
+            config.headers['Authorization'] = `Bearer ${token}`;
         }
+
+        if (config.body && typeof config.body === 'object') {
+            config.body = JSON.stringify(config.body);
+        }
+
+        console.log('🌐 API Call:', endpoint, config);
+
+        const response = await fetch(`${this.API_BASE_URL}${endpoint}`, config);
+
+        // ✅ CORRECCIÓN: Mejor manejo de errores 401
+        if (response.status === 401) {
+            console.warn('⚠️ Token inválido o expirado');
+            
+            // Solo redirigir a login si no estamos en una vista pública
+            if (!endpoint.includes('/auth/')) {
+                // Limpiar token inválido
+                localStorage.removeItem('authToken');
+                this.currentUser = null;
+                this.showLogin();
+            }
+            
+            throw new Error('Sesión expirada. Por favor, inicia sesión nuevamente.');
+        }
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Error ${response.status}: ${errorText || response.statusText}`);
+        }
+
+        const result = await response.json();
+        console.log('✅ API Response:', result);
+        return result;
+
+    } catch (error) {
+        console.error('❌ API Call error:', error);
+        
+        // ✅ CORRECCIÓN: No mostrar alerta para errores de autenticación
+        if (error.message.includes('Sesión expirada')) {
+            // Ya se manejó arriba, no hacer nada adicional
+        } else {
+            this.showAlert('Error en la conexión: ' + error.message, 'danger');
+        }
+        
+        throw error;
     }
+}
 
     // ==================== DASHBOARD ====================
 
     async loadDashboardData() {
-        try {
-            this.showLoading(true);
-            const data = await this.apiCall('/dashboard');
-            this.updateDashboardUI(data);
-        } catch (error) {
-            console.error('Error loading dashboard:', error);
-            // Mostrar un mensaje más específico para el error 404
-            if (error.message.includes('404') && error.message.includes('Usuario no encontrado')) {
-                this.showAlert('Error: Perfil de usuario incompleto. Por favor, contacta al administrador.', 'danger');
-            } else {
-                this.showAlert('Error al cargar el dashboard: ' + error.message, 'danger');
-            }
-        } finally {
-            this.showLoading(false);
+    try {
+        this.showLoading(true);
+        const data = await this.apiCall('/dashboard');
+        this.updateDashboardUI(data);
+    } catch (error) {
+        console.error('Error loading dashboard:', error);
+        
+        // ✅ CORRECCIÓN: Manejo específico de errores sin redirigir a login
+        if (error.message.includes('Sesión expirada')) {
+            // Ya se manejó en apiCall, no hacer nada adicional
+        } else if (error.message.includes('404') && error.message.includes('Usuario no encontrado')) {
+            this.showAlert('Error: Perfil de usuario incompleto. Por favor, contacta al administrador.', 'danger');
+        } else {
+            this.showAlert('Error al cargar el dashboard: ' + error.message, 'warning');
+            // ❌ NO redirigir a login aquí
         }
+    } finally {
+        this.showLoading(false);
     }
-
+}
     updateDashboardUI(data) {
         // Actualizar tarjetas de estadísticas
         if (document.getElementById('total-animals')) {
@@ -851,6 +865,40 @@ class App {
         return window.app;
     }
 }
+
+
+// ==================== INICIALIZACIÓN GARANTIZADA ====================
+
+function initializeManagers() {
+    console.log('🔄 Inicializando managers...');
+    
+    if (window.app) {
+        // Inicializar todos los managers
+        window.animalsManager = new AnimalsManager(window.app);
+        window.salesManager = new SalesManager(window.app);
+        window.feedsManager = new FeedsManager(window.app);
+        window.inventoryManager = new InventoryManager(window.app);
+        window.purchasesManager = new PurchasesManager(window.app);
+        window.reportsManager = new ReportsManager(window.app);
+        
+        console.log('✅ Todos los managers inicializados');
+    } else {
+        console.error('❌ App no está disponible');
+    }
+}
+
+// Inicializar cuando la app esté lista
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('📄 DOM cargado, inicializando app...');
+    
+    // Inicializar la aplicación principal
+    window.app = new App();
+    
+    // Inicializar managers después de un breve delay
+    setTimeout(initializeManagers, 1000);
+});
+
+
 
 // CONEXIÓN GARANTIZADA - Ejecutar después de que todo esté cargado
 function initializeAppWithRetry() {
