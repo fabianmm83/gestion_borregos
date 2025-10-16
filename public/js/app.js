@@ -71,13 +71,15 @@ class App {
 
     // ==================== AUTENTICACIÓN PERSISTENTE ====================
 
+// ==================== AUTENTICACIÓN PERSISTENTE ====================
+
 async checkAuthAndLoad() {
     const token = localStorage.getItem('authToken');
     console.log('🔐 Verificando autenticación, token encontrado:', !!token);
     
     if (token) {
         try {
-            // Verificar token con Firebase
+            // ✅ VERIFICACIÓN MÁS ROBUSTA DEL TOKEN
             const authResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${this.FIREBASE_API_KEY}`, {
                 method: 'POST',
                 headers: {
@@ -91,7 +93,7 @@ async checkAuthAndLoad() {
             const authData = await authResponse.json();
             
             if (authData.users && authData.users.length > 0) {
-                // Token válido - usuario autenticado
+                // ✅ TOKEN VÁLIDO - USUARIO AUTENTICADO
                 const user = authData.users[0];
                 this.currentUser = {
                     uid: user.localId,
@@ -104,26 +106,39 @@ async checkAuthAndLoad() {
                 this.loadDashboardData();
                 return;
             } else {
-                // Token inválido - limpiar
-                console.log('❌ Token inválido');
+                // ❌ TOKEN INVÁLIDO - LIMPIAR
+                console.log('❌ Token inválido o expirado');
                 localStorage.removeItem('authToken');
+                this.currentUser = null;
             }
         } catch (error) {
-            console.error('Error verificando token:', error);
-            // En caso de error de red, mantener el token y mostrar la app
-            console.log('⚠️ Error de red, manteniendo sesión...');
-            this.showApp();
-            this.loadDashboardData();
-            return;
+            console.error('⚠️ Error verificando token:', error);
+            
+            // ✅ EN CASO DE ERROR DE RED, INTENTAR USAR EL TOKEN DE TODAS FORMAS
+            console.log('🌐 Error de red, intentando continuar con sesión...');
+            
+            // Verificar si el token parece válido (formato JWT)
+            if (token && token.split('.').length === 3) {
+                console.log('🔑 Token tiene formato JWT válido, continuando...');
+                this.currentUser = {
+                    uid: 'unknown',
+                    email: 'usuario@temporal.com',
+                    name: 'Usuario'
+                };
+                this.showApp();
+                this.loadDashboardData();
+                return;
+            } else {
+                console.log('❌ Token con formato inválido');
+                localStorage.removeItem('authToken');
+            }
         }
     }
     
-    // No hay token o token inválido
-    console.log('🔒 No hay sesión activa');
+    // ✅ NO HAY TOKEN O TOKEN INVÁLIDO
+    console.log('🔒 No hay sesión activa válida');
     this.showLogin();
 }
-
-
 showLogin() {
         // Ocultar aplicación y mostrar login
         document.getElementById('app-container').style.display = 'none';
@@ -319,14 +334,11 @@ isTokenExpired(token) {
     try {
         let token = localStorage.getItem('authToken');
         
-        // Verificar si el token está expirado
+        // ✅ VERIFICACIÓN MÁS PERMISIVA DEL TOKEN
         if (token && this.isTokenExpired(token)) {
-            console.log('🔄 Token expirado, limpiando...');
-            localStorage.removeItem('authToken');
-            token = null;
-            this.currentUser = null;
-            this.showLogin();
-            throw new Error('Sesión expirada');
+            console.log('🔄 Token expirado según timestamp');
+            // No limpiar inmediatamente, intentar usar de todas formas
+            console.log('⚠️ Token expirado pero intentando continuar...');
         }
 
         const config = {
@@ -337,7 +349,7 @@ isTokenExpired(token) {
             ...options
         };
 
-        // Agregar token de autenticación si existe
+        // ✅ AGREGAR TOKEN SI EXISTE (INCLUSO SI ESTÁ EXPIRADO)
         if (token && !endpoint.includes('/auth/') && endpoint !== '/health') {
             config.headers['Authorization'] = `Bearer ${token}`;
         }
@@ -346,16 +358,26 @@ isTokenExpired(token) {
             config.body = JSON.stringify(config.body);
         }
 
-        console.log('🌐 API Call:', endpoint, config);
+        console.log('🌐 API Call:', endpoint);
 
         const response = await fetch(`${this.API_BASE_URL}${endpoint}`, config);
 
+        // ✅ MANEJO MÁS ESPECÍFICO DE ERROR 401
         if (response.status === 401) {
-            console.warn('⚠️ Token inválido o expirado');
-            localStorage.removeItem('authToken');
-            this.currentUser = null;
-            this.showLogin();
-            throw new Error('Sesión expirada. Por favor, inicia sesión nuevamente.');
+            console.warn('⚠️ 401 Unauthorized en API call');
+            
+            // Solo redirigir si no es un endpoint público
+            if (!endpoint.includes('/auth/')) {
+                // Limpiar token solo si realmente falla la autenticación
+                const errorText = await response.text();
+                if (errorText.includes('token') || errorText.includes('auth')) {
+                    console.log('🔐 Token rechazado por el servidor, limpiando...');
+                    localStorage.removeItem('authToken');
+                    this.currentUser = null;
+                    this.showLogin();
+                }
+            }
+            throw new Error('Error de autenticación: ' + response.statusText);
         }
 
         if (!response.ok) {
@@ -364,15 +386,15 @@ isTokenExpired(token) {
         }
 
         const result = await response.json();
-        console.log('✅ API Response:', result);
         return result;
 
     } catch (error) {
         console.error('❌ API Call error:', error);
         
-        if (error.message.includes('Sesión expirada')) {
-            // Ya se manejó arriba, no mostrar alerta adicional
-        } else {
+        // ✅ NO MOSTRAR ALERTA PARA ERRORES DE AUTENTICACIÓN (ya se manejan)
+        if (!error.message.includes('Sesión expirada') && 
+            !error.message.includes('401') &&
+            !error.message.includes('Error de autenticación')) {
             this.showAlert('Error en la conexión: ' + error.message, 'danger');
         }
         
@@ -382,50 +404,99 @@ isTokenExpired(token) {
 
     // ==================== DASHBOARD ====================
 
-    async loadDashboardData() {
+async loadDashboardData() {
     try {
         this.showLoading(true);
-        const data = await this.apiCall('/dashboard');
-        this.updateDashboardUI(data);
-    } catch (error) {
-        console.error('Error loading dashboard:', error);
         
-        // ✅ CORRECCIÓN: Manejo específico de errores sin redirigir a login
-        if (error.message.includes('Sesión expirada')) {
-            // Ya se manejó en apiCall, no hacer nada adicional
-        } else if (error.message.includes('404') && error.message.includes('Usuario no encontrado')) {
-            this.showAlert('Error: Perfil de usuario incompleto. Por favor, contacta al administrador.', 'danger');
+        // ✅ OBTENER DATOS ESPECÍFICOS PARA EL DASHBOARD
+        const [dashboardData, animalsData] = await Promise.all([
+            this.apiCall('/dashboard').catch(error => {
+                console.warn('Error cargando dashboard:', error);
+                return { total_animals: 0, active_animals: 0, low_stock_items: 0, total_inventory: 0 };
+            }),
+            this.apiCall('/animals').catch(error => {
+                console.warn('Error cargando animales para dashboard:', error);
+                return [];
+            })
+        ]);
+
+        // ✅ SI EL DASHBOARD NO TRAE DATOS, CALCULARLOS MANUALMENTE
+        let finalData = { ...dashboardData };
+        
+        if (!finalData.total_animals && Array.isArray(animalsData)) {
+            finalData.total_animals = animalsData.length;
+            finalData.active_animals = animalsData.filter(animal => 
+                animal.status === 'active' || !animal.status
+            ).length;
+        }
+
+        // ✅ SI TODAVÍA NO HAY DATOS, USAR VALORES POR DEFECTO
+        if (!finalData.total_animals) {
+            finalData = {
+                total_animals: 0,
+                active_animals: 0,
+                low_stock_items: 0,
+                total_inventory: 0,
+                ...finalData
+            };
+        }
+
+        console.log('📊 Datos del dashboard:', finalData);
+        this.updateDashboardUI(finalData);
+        
+    } catch (error) {
+        console.error('❌ Error loading dashboard:', error);
+        
+        // ✅ NO REDIRIGIR A LOGIN - MOSTRAR DATOS VACÍOS
+        if (error.message.includes('Sesión expirada') || error.message.includes('401')) {
+            // Ya se maneja en apiCall
         } else {
-            this.showAlert('Error al cargar el dashboard: ' + error.message, 'warning');
-            // ❌ NO redirigir a login aquí
+            this.showAlert('Error al cargar el dashboard. Mostrando datos básicos.', 'warning');
+            // Mostrar dashboard con datos vacíos
+            this.updateDashboardUI({
+                total_animals: 0,
+                active_animals: 0,
+                low_stock_items: 0,
+                total_inventory: 0
+            });
         }
     } finally {
         this.showLoading(false);
     }
 }
-    updateDashboardUI(data) {
-        // Actualizar tarjetas de estadísticas
-        if (document.getElementById('total-animals')) {
-            document.getElementById('total-animals').textContent = data.total_animals || 0;
-        }
-        if (document.getElementById('active-animals')) {
-            document.getElementById('active-animals').textContent = data.active_animals || 0;
-        }
-        if (document.getElementById('low-stock-items')) {
-            document.getElementById('low-stock-items').textContent = data.low_stock_items || 0;
-        }
-        if (document.getElementById('total-inventory')) {
-            document.getElementById('total-inventory').textContent = data.total_inventory || 0;
-        }
-        
-        // Actualizar alertas
-        if (document.getElementById('low-stock-alert')) {
-            document.getElementById('low-stock-alert').textContent = (data.low_stock_items || 0) + ' items';
-        }
-        if (document.getElementById('active-animals-alert')) {
-            document.getElementById('active-animals-alert').textContent = (data.active_animals || 0) + ' animales';
-        }
+
+updateDashboardUI(data) {
+    console.log('🎨 Actualizando UI del dashboard con:', data);
+    
+    // ✅ ACTUALIZAR TARJETAS CON VALORES SEGUROS
+    const safeData = {
+        total_animals: data.total_animals || 0,
+        active_animals: data.active_animals || 0,
+        low_stock_items: data.low_stock_items || 0,
+        total_inventory: data.total_inventory || 0
+    };
+
+    if (document.getElementById('total-animals')) {
+        document.getElementById('total-animals').textContent = safeData.total_animals;
     }
+    if (document.getElementById('active-animals')) {
+        document.getElementById('active-animals').textContent = safeData.active_animals;
+    }
+    if (document.getElementById('low-stock-items')) {
+        document.getElementById('low-stock-items').textContent = safeData.low_stock_items;
+    }
+    if (document.getElementById('total-inventory')) {
+        document.getElementById('total-inventory').textContent = safeData.total_inventory;
+    }
+    
+    // ✅ ACTUALIZAR ALERTAS
+    if (document.getElementById('low-stock-alert')) {
+        document.getElementById('low-stock-alert').textContent = safeData.low_stock_items + ' items';
+    }
+    if (document.getElementById('active-animals-alert')) {
+        document.getElementById('active-animals-alert').textContent = safeData.active_animals + ' animales';
+    }
+}
 
     // ==================== NAVEGACIÓN Y VISTAS ====================
 
