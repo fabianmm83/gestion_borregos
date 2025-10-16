@@ -29,7 +29,7 @@ class PurchasesManager {
     async loadPurchases() {
     try {
         console.log('🔄 Cargando compras desde API...');
-        const response = await this.app.apiCall('/purchases');
+        const response = await this.app.apiCall('/api/purchases');
         
         console.log('📋 Respuesta completa:', response);
         console.log('🔍 Estructura de data:', response.data); // ← NUEVO
@@ -189,7 +189,7 @@ findPurchasesArray(obj) {
 
         console.log('📦 Enviando compra:', purchaseData);
         
-        const response = await this.app.apiCall('/purchases', 'POST', purchaseData);
+        const response = await this.app.apiCall('/api/purchases', 'POST', purchaseData);
         console.log('✅ Compra registrada:', response);
         
         // Cerrar modal y recargar lista
@@ -210,7 +210,7 @@ findPurchasesArray(obj) {
 
     try {
         this.app.showLoading(true);
-        await this.app.apiCall(`/purchases/${purchaseId}`, 'DELETE');
+        await this.app.apiCall(`/api/purchases/${purchaseId}`, 'DELETE');
         
         // ✅ CORREGIDO: Usar showAlert
         this.app.showAlert('Compra eliminada exitosamente', 'success');
