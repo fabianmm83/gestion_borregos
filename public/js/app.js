@@ -67,78 +67,56 @@ class App {
         }
     }
 
-    // ==================== AUTENTICACIÓN ====================
+   
 
-    // ==================== AUTENTICACIÓN PERSISTENTE ====================
-
-// ==================== AUTENTICACIÓN PERSISTENTE ====================
-
+// Reemplazar el método checkAuthAndLoad actual por esta versión mejorada
 async checkAuthAndLoad() {
     const token = localStorage.getItem('authToken');
-    console.log('🔐 Verificando autenticación, token encontrado:', !!token);
     
-    if (token) {
-        try {
-            // ✅ VERIFICACIÓN MÁS ROBUSTA DEL TOKEN
-            const authResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${this.FIREBASE_API_KEY}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    idToken: token
-                })
-            });
-
-            const authData = await authResponse.json();
-            
-            if (authData.users && authData.users.length > 0) {
-                // ✅ TOKEN VÁLIDO - USUARIO AUTENTICADO
-                const user = authData.users[0];
-                this.currentUser = {
-                    uid: user.localId,
-                    email: user.email,
-                    name: user.displayName || user.email.split('@')[0]
-                };
-                
-                console.log('✅ Usuario autenticado:', this.currentUser.email);
-                this.showApp();
-                this.loadDashboardData();
-                return;
-            } else {
-                // ❌ TOKEN INVÁLIDO - LIMPIAR
-                console.log('❌ Token inválido o expirado');
-                localStorage.removeItem('authToken');
-                this.currentUser = null;
-            }
-        } catch (error) {
-            console.error('⚠️ Error verificando token:', error);
-            
-            // ✅ EN CASO DE ERROR DE RED, INTENTAR USAR EL TOKEN DE TODAS FORMAS
-            console.log('🌐 Error de red, intentando continuar con sesión...');
-            
-            // Verificar si el token parece válido (formato JWT)
-            if (token && token.split('.').length === 3) {
-                console.log('🔑 Token tiene formato JWT válido, continuando...');
-                this.currentUser = {
-                    uid: 'unknown',
-                    email: 'usuario@temporal.com',
-                    name: 'Usuario'
-                };
-                this.showApp();
-                this.loadDashboardData();
-                return;
-            } else {
-                console.log('❌ Token con formato inválido');
-                localStorage.removeItem('authToken');
-            }
-        }
+    if (!token) {
+        this.showLogin();
+        return;
     }
-    
-    // ✅ NO HAY TOKEN O TOKEN INVÁLIDO
-    console.log('🔒 No hay sesión activa válida');
-    this.showLogin();
+
+    // Verificar expiración del token primero
+    if (this.isTokenExpired(token)) {
+        console.log('🔑 Token expirado');
+        localStorage.removeItem('authToken');
+        this.showLogin();
+        return;
+    }
+
+    try {
+        const authResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${this.FIREBASE_API_KEY}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ idToken: token })
+        });
+
+        const authData = await authResponse.json();
+        
+        if (authData.users?.[0]) {
+            const user = authData.users[0];
+            this.currentUser = {
+                uid: user.localId,
+                email: user.email,
+                name: user.displayName || user.email.split('@')[0]
+            };
+            
+            this.showApp();
+            this.loadDashboardData();
+        } else {
+            throw new Error('Token inválido');
+        }
+        
+    } catch (error) {
+        console.error('Error en verificación:', error);
+        localStorage.removeItem('authToken');
+        this.showLogin();
+        this.showAlert('Sesión expirada. Por favor, inicia sesión nuevamente.', 'warning');
+    }
 }
+
 showLogin() {
         // Ocultar aplicación y mostrar login
         document.getElementById('app-container').style.display = 'none';
@@ -332,15 +310,7 @@ isTokenExpired(token) {
 
     async apiCall(endpoint, options = {}) {
     try {
-        let token = localStorage.getItem('authToken');
-        
-        // ✅ VERIFICACIÓN MÁS PERMISIVA DEL TOKEN
-        if (token && this.isTokenExpired(token)) {
-            console.log('🔄 Token expirado según timestamp');
-            // No limpiar inmediatamente, intentar usar de todas formas
-            console.log('⚠️ Token expirado pero intentando continuar...');
-        }
-
+        const token = localStorage.getItem('authToken');
         const config = {
             headers: {
                 'Content-Type': 'application/json',
@@ -349,8 +319,7 @@ isTokenExpired(token) {
             ...options
         };
 
-        // ✅ AGREGAR TOKEN SI EXISTE (INCLUSO SI ESTÁ EXPIRADO)
-        if (token && !endpoint.includes('/auth/') && endpoint !== '/health') {
+        if (token && !endpoint.includes('/auth/')) {
             config.headers['Authorization'] = `Bearer ${token}`;
         }
 
@@ -358,51 +327,38 @@ isTokenExpired(token) {
             config.body = JSON.stringify(config.body);
         }
 
-        console.log('🌐 API Call:', endpoint);
-
         const response = await fetch(`${this.API_BASE_URL}${endpoint}`, config);
-
-        // ✅ MANEJO MÁS ESPECÍFICO DE ERROR 401
+        
+        // Manejo específico de errores HTTP
         if (response.status === 401) {
-            console.warn('⚠️ 401 Unauthorized en API call');
-            
-            // Solo redirigir si no es un endpoint público
-            if (!endpoint.includes('/auth/')) {
-                // Limpiar token solo si realmente falla la autenticación
-                const errorText = await response.text();
-                if (errorText.includes('token') || errorText.includes('auth')) {
-                    console.log('🔐 Token rechazado por el servidor, limpiando...');
-                    localStorage.removeItem('authToken');
-                    this.currentUser = null;
-                    this.showLogin();
-                }
-            }
-            throw new Error('Error de autenticación: ' + response.statusText);
+            localStorage.removeItem('authToken');
+            this.currentUser = null;
+            this.showLogin();
+            throw new Error('Sesión expirada');
+        }
+
+        if (response.status === 404) {
+            throw new Error('Recurso no encontrado');
         }
 
         if (!response.ok) {
             const errorText = await response.text();
-            throw new Error(`Error ${response.status}: ${errorText || response.statusText}`);
+            throw new Error(`Error ${response.status}: ${errorText}`);
         }
 
-        const result = await response.json();
-        return result;
+        return await response.json();
 
     } catch (error) {
-        console.error('❌ API Call error:', error);
+        console.error(`API Call error [${endpoint}]:`, error);
         
-        // ✅ NO MOSTRAR ALERTA PARA ERRORES DE AUTENTICACIÓN (ya se manejan)
-        if (!error.message.includes('Sesión expirada') && 
-            !error.message.includes('401') &&
-            !error.message.includes('Error de autenticación')) {
+        // No mostrar alerta para errores de autenticación
+        if (!error.message.includes('Sesión expirada')) {
             this.showAlert('Error en la conexión: ' + error.message, 'danger');
         }
         
         throw error;
     }
 }
-
-
 // ==================== DASHBOARD ====================
 
 async loadDashboardData() {
