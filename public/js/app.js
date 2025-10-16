@@ -69,30 +69,213 @@ class App {
 
     // ==================== AUTENTICACIÓN ====================
 
-    async checkAuthAndLoad() {
-        const token = localStorage.getItem('authToken');
-        if (token) {
-            try {
-                const response = await this.apiCall('/auth/verify', {
-                    method: 'POST',
-                    body: { token }
-                });
+    // ==================== AUTENTICACIÓN PERSISTENTE ====================
+
+async checkAuthAndLoad() {
+    const token = localStorage.getItem('authToken');
+    console.log('🔐 Verificando autenticación, token encontrado:', !!token);
+    
+    if (token) {
+        try {
+            // Verificar token con Firebase
+            const authResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${this.FIREBASE_API_KEY}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    idToken: token
+                })
+            });
+
+            const authData = await authResponse.json();
+            
+            if (authData.users && authData.users.length > 0) {
+                // Token válido - usuario autenticado
+                const user = authData.users[0];
+                this.currentUser = {
+                    uid: user.localId,
+                    email: user.email,
+                    name: user.displayName || user.email.split('@')[0]
+                };
                 
-                if (response.valid) {
-                    this.currentUser = response.user;
-                    this.showApp();
-                    this.loadDashboardData();
-                } else {
-                    this.showLogin();
-                }
-            } catch (error) {
-                console.error('Auth check error:', error);
-                this.showLogin();
+                console.log('✅ Usuario autenticado:', this.currentUser.email);
+                this.showApp();
+                this.loadDashboardData();
+                return;
+            } else {
+                // Token inválido - limpiar
+                console.log('❌ Token inválido');
+                localStorage.removeItem('authToken');
             }
-        } else {
-            this.showLogin();
+        } catch (error) {
+            console.error('Error verificando token:', error);
+            // En caso de error de red, mantener el token y mostrar la app
+            console.log('⚠️ Error de red, manteniendo sesión...');
+            this.showApp();
+            this.loadDashboardData();
+            return;
         }
     }
+    
+    // No hay token o token inválido
+    console.log('🔒 No hay sesión activa');
+    this.showLogin();
+}
+
+// Modificar el método handleLogin para guardar correctamente
+async handleLogin(form) {
+    try {
+        this.showLoading(true);
+        const email = document.getElementById('login-email').value;
+        const password = document.getElementById('login-password').value;
+
+        console.log('Intentando login:', { email });
+
+        // Login con Firebase Auth
+        const authResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${this.FIREBASE_API_KEY}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                email,
+                password,
+                returnSecureToken: true
+            })
+        });
+
+        const authData = await authResponse.json();
+
+        if (authData.error) {
+            throw new Error(this.getAuthErrorMessage(authData.error.message));
+        }
+
+        console.log('✅ Login exitoso:', authData);
+
+        // 🔥 GUARDAR TOKEN PERSISTENTE
+        localStorage.setItem('authToken', authData.idToken);
+        
+        this.currentUser = {
+            uid: authData.localId,
+            email: authData.email,
+            name: authData.displayName || email
+        };
+
+        // Verificar/crear perfil en Firestore
+        try {
+            console.log('🔄 Verificando/Creando perfil en Firestore...');
+            const profileResponse = await this.apiCall('/auth/create-admin', {
+                method: 'POST',
+                body: { 
+                    email, 
+                    name: authData.displayName || email,
+                    uid: authData.localId
+                }
+            });
+            console.log('✅ Perfil creado/verificado en Firestore:', profileResponse);
+        } catch (profileError) {
+            console.warn('⚠️ Error creando/verificando perfil:', profileError);
+            // Continuar aunque falle la creación del perfil
+        }
+
+        this.showAlert('¡Bienvenido!', 'success');
+        this.showApp();
+        this.loadDashboardData();
+        
+    } catch (error) {
+        console.error('❌ Error en login:', error);
+        this.showAlert('Error al iniciar sesión: ' + error.message, 'danger');
+    } finally {
+        this.showLoading(false);
+    }
+}
+
+// Modificar el método handleRegister también
+async handleRegister(form) {
+    try {
+        this.showLoading(true);
+        const name = document.getElementById('register-name').value;
+        const email = document.getElementById('register-email').value;
+        const password = document.getElementById('register-password').value;
+
+        console.log('Intentando crear cuenta:', { name, email });
+
+        // 1. Crear usuario en Firebase Auth
+        const authResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${this.FIREBASE_API_KEY}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                email,
+                password,
+                returnSecureToken: true
+            })
+        });
+
+        const authData = await authResponse.json();
+
+        if (authData.error) {
+            throw new Error(this.getAuthErrorMessage(authData.error.message));
+        }
+
+        console.log('✅ Usuario creado en Auth:', authData);
+
+        // 🔥 GUARDAR TOKEN PERSISTENTE
+        localStorage.setItem('authToken', authData.idToken);
+        this.currentUser = {
+            uid: authData.localId,
+            email: authData.email,
+            name: name
+        };
+
+        // 3. Crear perfil en nuestro backend
+        try {
+            const profileResponse = await this.apiCall('/auth/create-admin', {
+                method: 'POST',
+                body: { 
+                    email, 
+                    name,
+                    uid: authData.localId
+                }
+            });
+            console.log('✅ Perfil creado en backend:', profileResponse);
+        } catch (profileError) {
+            console.warn('⚠️ Error creando perfil:', profileError);
+        }
+
+        this.showAlert('¡Cuenta creada exitosamente!', 'success');
+        this.showApp();
+        this.loadDashboardData();
+        
+    } catch (error) {
+        console.error('❌ Error completo al registrar:', error);
+        this.showAlert('Error al crear cuenta: ' + error.message, 'danger');
+    } finally {
+        this.showLoading(false);
+    }
+}
+
+// Mejorar el método logout
+logout() {
+    localStorage.removeItem('authToken');
+    this.currentUser = null;
+    this.showLogin();
+    this.showAlert('Sesión cerrada correctamente', 'info');
+}
+
+// Agregar método para verificar token expirado
+isTokenExpired(token) {
+    try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        return payload.exp * 1000 < Date.now();
+    } catch (error) {
+        return true;
+    }
+}
+
+
 
     showLogin() {
         // Ocultar aplicación y mostrar login
@@ -127,153 +310,22 @@ class App {
         };
         return messages[errorCode] || 'Error de autenticación: ' + errorCode;
     }
-
-    async handleRegister(form) {
-        try {
-            this.showLoading(true);
-            const name = document.getElementById('register-name').value;
-            const email = document.getElementById('register-email').value;
-            const password = document.getElementById('register-password').value;
-
-            console.log('Intentando crear cuenta:', { name, email });
-
-            // 1. Crear usuario en Firebase Auth
-            const authResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${this.FIREBASE_API_KEY}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    email,
-                    password,
-                    returnSecureToken: true
-                })
-            });
-
-            const authData = await authResponse.json();
-
-            if (authData.error) {
-                throw new Error(this.getAuthErrorMessage(authData.error.message));
-            }
-
-            console.log('✅ Usuario creado en Auth:', authData);
-
-            // 2. Guardar el token inmediatamente
-            localStorage.setItem('authToken', authData.idToken);
-            this.currentUser = {
-                uid: authData.localId,
-                email: authData.email,
-                name: name
-            };
-
-            // 3. Crear perfil en nuestro backend (Firebase Functions)
-            try {
-                const profileResponse = await this.apiCall('/auth/create-admin', {
-                    method: 'POST',
-                    body: { 
-                        email, 
-                        name,
-                        uid: authData.localId
-                    }
-                });
-                console.log('✅ Perfil creado en backend:', profileResponse);
-            } catch (profileError) {
-                console.warn('⚠️ Error creando perfil:', profileError);
-                // Continuamos aunque falle la creación del perfil
-            }
-
-            this.showAlert('¡Cuenta creada exitosamente!', 'success');
-            this.showApp();
-            this.loadDashboardData();
-            
-        } catch (error) {
-            console.error('❌ Error completo al registrar:', error);
-            this.showAlert('Error al crear cuenta: ' + error.message, 'danger');
-        } finally {
-            this.showLoading(false);
-        }
-    }
-
-    // Método para login - CON OPCIÓN 1 IMPLEMENTADA
-    async handleLogin(form) {
-        try {
-            this.showLoading(true);
-            const email = document.getElementById('login-email').value;
-            const password = document.getElementById('login-password').value;
-
-            console.log('Intentando login:', { email });
-
-            // Login con Firebase Auth
-            const authResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${this.FIREBASE_API_KEY}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    email,
-                    password,
-                    returnSecureToken: true
-                })
-            });
-
-            const authData = await authResponse.json();
-
-            if (authData.error) {
-                throw new Error(this.getAuthErrorMessage(authData.error.message));
-            }
-
-            console.log('✅ Login exitoso:', authData);
-
-            // Guardar token y usuario
-            localStorage.setItem('authToken', authData.idToken);
-            this.currentUser = {
-                uid: authData.localId,
-                email: authData.email,
-                name: authData.displayName || email
-            };
-
-            // 🔥 OPCIÓN 1 IMPLEMENTADA: Crear/verificar perfil en Firestore automáticamente
-            try {
-                console.log('🔄 Verificando/Creando perfil en Firestore...');
-                const profileResponse = await this.apiCall('/auth/create-admin', {
-                    method: 'POST',
-                    body: { 
-                        email, 
-                        name: authData.displayName || email,
-                        uid: authData.localId
-                    }
-                });
-                console.log('✅ Perfil creado/verificado en Firestore:', profileResponse);
-            } catch (profileError) {
-                console.warn('⚠️ Error creando/verificando perfil:', profileError);
-                // Continuamos aunque falle la creación del perfil para no bloquear el login
-                this.showAlert('Login exitoso, pero hubo un problema con el perfil. Puede que algunas funciones no estén disponibles.', 'warning');
-            }
-
-            this.showAlert('¡Bienvenido!', 'success');
-            this.showApp();
-            this.loadDashboardData();
-            
-        } catch (error) {
-            console.error('❌ Error en login:', error);
-            this.showAlert('Error al iniciar sesión: ' + error.message, 'danger');
-        } finally {
-            this.showLoading(false);
-        }
-    }
-
-    logout() {
-        localStorage.removeItem('authToken');
-        this.currentUser = null;
-        this.showLogin();
-        this.showAlert('Sesión cerrada correctamente', 'info');
-    }
-
     // ==================== COMUNICACIÓN CON API ====================
 
     async apiCall(endpoint, options = {}) {
     try {
-        const token = localStorage.getItem('authToken');
+        let token = localStorage.getItem('authToken');
+        
+        // Verificar si el token está expirado
+        if (token && this.isTokenExpired(token)) {
+            console.log('🔄 Token expirado, limpiando...');
+            localStorage.removeItem('authToken');
+            token = null;
+            this.currentUser = null;
+            this.showLogin();
+            throw new Error('Sesión expirada');
+        }
+
         const config = {
             headers: {
                 'Content-Type': 'application/json',
@@ -282,7 +334,7 @@ class App {
             ...options
         };
 
-        // Agregar token de autenticación si existe y no es endpoint público
+        // Agregar token de autenticación si existe
         if (token && !endpoint.includes('/auth/') && endpoint !== '/health') {
             config.headers['Authorization'] = `Bearer ${token}`;
         }
@@ -295,18 +347,11 @@ class App {
 
         const response = await fetch(`${this.API_BASE_URL}${endpoint}`, config);
 
-        // ✅ CORRECCIÓN: Mejor manejo de errores 401
         if (response.status === 401) {
             console.warn('⚠️ Token inválido o expirado');
-            
-            // Solo redirigir a login si no estamos en una vista pública
-            if (!endpoint.includes('/auth/')) {
-                // Limpiar token inválido
-                localStorage.removeItem('authToken');
-                this.currentUser = null;
-                this.showLogin();
-            }
-            
+            localStorage.removeItem('authToken');
+            this.currentUser = null;
+            this.showLogin();
             throw new Error('Sesión expirada. Por favor, inicia sesión nuevamente.');
         }
 
@@ -322,9 +367,8 @@ class App {
     } catch (error) {
         console.error('❌ API Call error:', error);
         
-        // ✅ CORRECCIÓN: No mostrar alerta para errores de autenticación
         if (error.message.includes('Sesión expirada')) {
-            // Ya se manejó arriba, no hacer nada adicional
+            // Ya se manejó arriba, no mostrar alerta adicional
         } else {
             this.showAlert('Error en la conexión: ' + error.message, 'danger');
         }
