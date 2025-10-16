@@ -908,6 +908,51 @@ app.post('/feeds', authenticate, async (req, res) => {
 // ==================== GESTIÓN DE INVENTARIO ====================
 
 
+
+app.get('/inventory', authenticate, async (req, res) => {
+    try {
+        const userId = req.user.uid;
+        const { page = 1, limit = 50, lowStock = false } = req.query;
+
+        let query = db.collection(COLLECTIONS.INVENTORY).where('userId', '==', userId);
+
+        const snapshot = await query.get();
+        let inventory = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            lastUpdated: doc.data().lastUpdated?.toDate?.() || null,
+            createdAt: doc.data().createdAt?.toDate?.() || null
+        }));
+
+        // Filtrar por stock bajo si se solicita
+        if (lowStock === 'true') {
+            inventory = inventory.filter(item => item.currentStock <= item.minStock);
+        }
+
+        // Paginación
+        const startIndex = (page - 1) * limit;
+        const endIndex = startIndex + parseInt(limit);
+        const paginatedInventory = inventory.slice(startIndex, endIndex);
+
+        res.json(createResponse(true, {
+            inventory: paginatedInventory,
+            pagination: {
+                currentPage: parseInt(page),
+                totalPages: Math.ceil(inventory.length / limit),
+                totalItems: inventory.length,
+                hasNext: endIndex < inventory.length,
+                hasPrev: startIndex > 0
+            },
+            lowStockCount: inventory.filter(item => item.currentStock <= item.minStock).length
+        }, 'Inventario obtenido exitosamente'));
+
+    } catch (error) {
+        logger.error('Error obteniendo inventario:', error);
+        res.status(500).json(createResponse(false, null, 'Error al obtener inventario', error.message));
+    }
+});
+
+
 // Obtener un item específico del inventario
 app.get('/inventory/:id', authenticate, async (req, res) => {
     try {
