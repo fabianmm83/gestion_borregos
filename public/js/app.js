@@ -413,46 +413,52 @@ async loadDashboardData() {
         const response = await this.apiCall('/dashboard');
         console.log('📈 Respuesta completa del dashboard:', response);
         
-        // ✅ DEBUG TEMPORAL - VER ESTRUCTURA EXACTA
-        console.log('🔍 Estructura de response.data:', response.data);
-        console.log('🔍 Keys de response.data:', response.data ? Object.keys(response.data) : 'No data');
+        // ✅ DEBUG DETALLADO - VER ESTRUCTURA COMPLETA
+        console.log('🔍 Estructura COMPLETA de response:');
+        console.log('- response.success:', response.success);
+        console.log('- response.message:', response.message);
+        console.log('- response.data:', response.data);
         
-        // ✅ EXTRAER DATOS CORRECTAMENTE DE LA RESPUESTA
-        let dashboardData = {};
-        
-        if (response && typeof response === 'object') {
-            // Si la respuesta tiene data, usarla
-            if (response.data && typeof response.data === 'object') {
-                dashboardData = response.data;
-                console.log('🎯 Usando response.data:', dashboardData);
-            } else {
-                // Usar la respuesta directamente
-                dashboardData = response;
-                console.log('🎯 Usando response directamente:', dashboardData);
-            }
+        if (response.data) {
+            console.log('🔍 Keys de response.data:', Object.keys(response.data));
+            console.log('🔍 Valores de response.data:');
+            Object.keys(response.data).forEach(key => {
+                console.log(`  - ${key}:`, response.data[key]);
+            });
         }
         
-        // ✅ VALORES POR DEFECTO SEGUROS - BUSCAR EN DIFERENTES FORMATOS
+        // ✅ EXTRAER DATOS CORRECTAMENTE
+        let dashboardData = {};
+        
+        if (response && response.data) {
+            dashboardData = response.data;
+            console.log('🎯 Usando response.data:', dashboardData);
+        } else {
+            dashboardData = response;
+            console.log('🎯 Usando response directamente:', dashboardData);
+        }
+        
+        // ✅ BUSCAR DATOS EN DIFERENTES ESTRUCTURAS POSIBLES
         const finalData = {
-            total_animals: dashboardData.total_animals || 
-                          dashboardData.totalAnimals || 
-                          dashboardData.animals_total ||
-                          (dashboardData.animals ? dashboardData.animals.total : 0) || 0,
+            total_animals: this.findNestedValue(dashboardData, [
+                'total_animals', 'totalAnimals', 'animals_total', 
+                'total', 'count', 'animalCount'
+            ]) || 0,
             
-            active_animals: dashboardData.active_animals || 
-                           dashboardData.activeAnimals || 
-                           dashboardData.animals_active ||
-                           (dashboardData.animals ? dashboardData.animals.active : 0) || 0,
+            active_animals: this.findNestedValue(dashboardData, [
+                'active_animals', 'activeAnimals', 'animals_active',
+                'active', 'activeCount'
+            ]) || 0,
             
-            low_stock_items: dashboardData.low_stock_items || 
-                            dashboardData.lowStockItems || 
-                            dashboardData.inventory_low ||
-                            (dashboardData.inventory ? dashboardData.inventory.low_stock : 0) || 0,
+            low_stock_items: this.findNestedValue(dashboardData, [
+                'low_stock_items', 'lowStockItems', 'inventory_low',
+                'low_stock', 'lowStock', 'stock_low'
+            ]) || 0,
             
-            total_inventory: dashboardData.total_inventory || 
-                           dashboardData.totalInventory || 
-                           dashboardData.inventory_total ||
-                           (dashboardData.inventory ? dashboardData.inventory.total : 0) || 0
+            total_inventory: this.findNestedValue(dashboardData, [
+                'total_inventory', 'totalInventory', 'inventory_total',
+                'inventory_count', 'totalItems'
+            ]) || 0
         };
         
         console.log('🎯 Datos finales para UI:', finalData);
@@ -460,8 +466,6 @@ async loadDashboardData() {
         
     } catch (error) {
         console.error('❌ Error loading dashboard:', error);
-        
-        // ✅ NO REDIRIGIR A LOGIN - USAR VALORES POR DEFECTO
         this.showAlert('Error al cargar el dashboard. Mostrando datos básicos.', 'warning');
         this.updateDashboardUI({
             total_animals: 0,
@@ -472,6 +476,32 @@ async loadDashboardData() {
     } finally {
         this.showLoading(false);
     }
+}
+
+// ✅ AGREGAR MÉTODO PARA BUSCAR VALORES EN DIFERENTES CLAVES
+findNestedValue(obj, keys) {
+    for (let key of keys) {
+        if (obj && obj[key] !== undefined && obj[key] !== null) {
+            console.log(`🔍 Encontrado ${key}:`, obj[key]);
+            return obj[key];
+        }
+    }
+    
+    // Buscar en estructuras anidadas
+    if (obj && typeof obj === 'object') {
+        for (let mainKey in obj) {
+            if (obj[mainKey] && typeof obj[mainKey] === 'object') {
+                for (let key of keys) {
+                    if (obj[mainKey][key] !== undefined && obj[mainKey][key] !== null) {
+                        console.log(`🔍 Encontrado ${mainKey}.${key}:`, obj[mainKey][key]);
+                        return obj[mainKey][key];
+                    }
+                }
+            }
+        }
+    }
+    
+    return null;
 }
 
 updateDashboardUI(data) {
