@@ -1380,65 +1380,10 @@ app.put('/inventory/:id/stock', authenticate, async (req, res) => {
     }
 });
 
+
 // ==================== GESTIÓN DE COMPRAS ====================
 
-// Obtener compras
-app.get('/purchases', authenticate, async (req, res) => {
-    try {
-        const userId = req.user.uid;
-        const { page = 1, limit = 50, type, startDate, endDate } = req.query;
-
-        let query = db.collection(COLLECTIONS.PURCHASES).where('userId', '==', userId);
-
-        // Aplicar filtros
-        if (type) query = query.where('type', '==', type);
-        if (startDate || endDate) {
-            query = query.orderBy('purchaseDate');
-        } else {
-            query = query.orderBy('purchaseDate', 'desc');
-        }
-
-        const snapshot = await query.get();
-        let purchases = snapshot.docs.map(doc => {
-            const data = doc.data();
-            return {
-                id: doc.id,
-                ...data,
-                purchaseDate: data.purchaseDate?.toDate?.() || data.purchaseDate,
-                createdAt: data.createdAt?.toDate?.() || null
-            };
-        });
-
-        // Filtrar por fecha si se proporciona
-        if (startDate) {
-            purchases = purchases.filter(p => new Date(p.purchaseDate) >= new Date(startDate));
-        }
-        if (endDate) {
-            purchases = purchases.filter(p => new Date(p.purchaseDate) <= new Date(endDate));
-        }
-
-        // Paginación
-        const startIndex = (page - 1) * limit;
-        const endIndex = startIndex + parseInt(limit);
-        const paginatedPurchases = purchases.slice(startIndex, endIndex);
-
-        res.json(createResponse(true, {
-            purchases: paginatedPurchases,
-            pagination: {
-                currentPage: parseInt(page),
-                totalPages: Math.ceil(purchases.length / limit),
-                totalPurchases: purchases.length,
-                hasNext: endIndex < purchases.length,
-                hasPrev: startIndex > 0
-            }
-        }, 'Compras obtenidas exitosamente'));
-
-    } catch (error) {
-        logger.error('Error obteniendo compras', error);
-        res.status(500).json(createResponse(false, null, 'Error al obtener compras', error.message));
-    }
-});
-// Endpoint de diagnóstico para compras - AGREGAR ESTO
+// ⭐⭐ PRIMERO: Endpoints de diagnóstico (van primero)
 app.get('/debug/purchases', authenticate, async (req, res) => {
     try {
         const userId = req.user.uid;
@@ -1484,12 +1429,17 @@ app.get('/debug/purchases', authenticate, async (req, res) => {
     }
 });
 
-// Registrar nueva compra
+// ⭐⭐ SEGUNDO: POST (Crear compras) - ESTE DEBE IR ANTES DEL GET
 // Registrar nueva compra - VERSIÓN MEJORADA CON MÁS LOGGING
 app.post('/purchases', authenticate, async (req, res) => {
     let purchaseRef;
     
     try {
+        // ⭐⭐ LOG DE CONFIRMACIÓN CRÍTICO ⭐⭐
+        console.log('⭐⭐⭐ ENDPOINT POST /purchases EJECUTADO ⭐⭐⭐');
+        console.log('⭐⭐⭐ MÉTODO:', req.method);
+        console.log('⭐⭐⭐ BODY:', req.body);
+        
         const userId = req.user.uid;
         const {
             itemName,
@@ -1617,6 +1567,65 @@ app.post('/purchases', authenticate, async (req, res) => {
     }
 });
 
+// ⭐⭐ TERCERO: GET (Obtener compras) - ESTE DEBE IR DESPUÉS DEL POST
+// Obtener compras
+app.get('/purchases', authenticate, async (req, res) => {
+    try {
+        const userId = req.user.uid;
+        const { page = 1, limit = 50, type, startDate, endDate } = req.query;
+
+        let query = db.collection(COLLECTIONS.PURCHASES).where('userId', '==', userId);
+
+        // Aplicar filtros
+        if (type) query = query.where('type', '==', type);
+        if (startDate || endDate) {
+            query = query.orderBy('purchaseDate');
+        } else {
+            query = query.orderBy('purchaseDate', 'desc');
+        }
+
+        const snapshot = await query.get();
+        let purchases = snapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                ...data,
+                purchaseDate: data.purchaseDate?.toDate?.() || data.purchaseDate,
+                createdAt: data.createdAt?.toDate?.() || null
+            };
+        });
+
+        // Filtrar por fecha si se proporciona
+        if (startDate) {
+            purchases = purchases.filter(p => new Date(p.purchaseDate) >= new Date(startDate));
+        }
+        if (endDate) {
+            purchases = purchases.filter(p => new Date(p.purchaseDate) <= new Date(endDate));
+        }
+
+        // Paginación
+        const startIndex = (page - 1) * limit;
+        const endIndex = startIndex + parseInt(limit);
+        const paginatedPurchases = purchases.slice(startIndex, endIndex);
+
+        res.json(createResponse(true, {
+            purchases: paginatedPurchases,
+            pagination: {
+                currentPage: parseInt(page),
+                totalPages: Math.ceil(purchases.length / limit),
+                totalPurchases: purchases.length,
+                hasNext: endIndex < purchases.length,
+                hasPrev: startIndex > 0
+            }
+        }, 'Compras obtenidas exitosamente'));
+
+    } catch (error) {
+        logger.error('Error obteniendo compras', error);
+        res.status(500).json(createResponse(false, null, 'Error al obtener compras', error.message));
+    }
+});
+
+// ⭐⭐ CUARTO: PUT y DELETE (Actualizar y eliminar)
 // Actualizar compra
 app.put('/purchases/:id', authenticate, async (req, res) => {
     try {
@@ -1686,6 +1695,7 @@ app.delete('/purchases/:id', authenticate, async (req, res) => {
         res.status(500).json(createResponse(false, null, 'Error al eliminar compra', error.message));
     }
 });
+
 
 // ==================== MANEJO DE ERRORES ====================
 
