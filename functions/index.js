@@ -1381,6 +1381,32 @@ app.put('/inventory/:id/stock', authenticate, async (req, res) => {
 });
 
 
+
+// ==================== DIAGNÓSTICO ESPECÍFICO ====================
+
+// Middleware específico para purchases
+app.use('/purchases', (req, res, next) => {
+    console.log('🔧🔧🔧 MIDDLEWARE PURCHASES ESPECÍFICO 🔧🔧🔧');
+    console.log('🔧 MÉTODO:', req.method);
+    console.log('🔧 URL:', req.url);
+    console.log('🔧 ORIGINAL URL:', req.originalUrl);
+    console.log('🔧 PATH:', req.path);
+    console.log('🔧 BODY:', req.body);
+    console.log('🔧 TIMESTAMP:', new Date().toISOString());
+    next();
+});
+
+// LUEGO tus rutas de purchases en el ORDEN CORRECTO:
+// 1. POST /purchases
+// 2. GET /purchases  
+// 3. PUT /purchases/:id
+// 4. DELETE /purchases/:id
+
+
+
+
+
+
 // ==================== GESTIÓN DE COMPRAS ====================
 
 // ⭐⭐ PRIMERO: Endpoints de diagnóstico (van primero)
