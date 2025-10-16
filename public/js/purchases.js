@@ -31,29 +31,30 @@ class PurchasesManager {
         console.log('🔄 Cargando compras desde API...');
         const response = await this.app.apiCall('/purchases');
         
-        console.log('📋 Respuesta completa:', response); // ← AGREGAR ESTO PARA DEBUG
+        console.log('📋 Respuesta completa:', response);
+        console.log('🔍 Estructura de data:', response.data); // ← NUEVO
+        console.log('🔍 Keys de data:', response.data ? Object.keys(response.data) : 'No data'); // ← NUEVO
         
         // MANEJO MEJORADO DE FORMATOS DE RESPUESTA
         let purchases = [];
         
         if (Array.isArray(response)) {
-            // Formato: array directo
             purchases = response;
         } else if (response.purchases && Array.isArray(response.purchases)) {
-            // Formato: { purchases: [], pagination: {} }
             purchases = response.purchases;
         } else if (response.data && Array.isArray(response.data)) {
-            // Formato: { data: [], ... }
             purchases = response.data;
         } else if (response.data && response.data.purchases && Array.isArray(response.data.purchases)) {
-            // Formato: { data: { purchases: [], pagination: {} }, ... }
+            purchases = response.data.purchases;
+        } else if (response.data && Array.isArray(response.data.purchases)) {
             purchases = response.data.purchases;
         } else {
             console.warn('⚠️ Formato de respuesta inesperado para compras:', response);
-            purchases = [];
+            // INTENTAR ENCONTRAR EL ARRAY EN CUALQUIER LUGAR
+            purchases = this.findPurchasesArray(response);
         }
         
-        console.log(`🛒 Compras extraídas:`, purchases); // ← VER QUÉ SE EXTRAE
+        console.log(`🛒 Compras extraídas:`, purchases);
         this.purchases = purchases;
         console.log(`✅ ${purchases.length} compras cargadas`);
         this.renderPurchases();
@@ -64,6 +65,25 @@ class PurchasesManager {
     }
 }
 
+// NUEVO MÉTODO PARA BUSCAR EL ARRAY EN CUALQUIER LUGAR
+findPurchasesArray(obj) {
+    if (!obj || typeof obj !== 'object') return [];
+    
+    // Buscar recursivamente un array que contenga compras
+    for (let key in obj) {
+        if (Array.isArray(obj[key])) {
+            console.log(`🔍 Encontrado array en key: ${key}`, obj[key]);
+            // Verificar si parece ser un array de compras
+            if (obj[key].length > 0 && obj[key][0].itemName !== undefined) {
+                return obj[key];
+            }
+        } else if (typeof obj[key] === 'object') {
+            const found = this.findPurchasesArray(obj[key]);
+            if (found.length > 0) return found;
+        }
+    }
+    return [];
+}
     renderPurchases(purchases = this.purchases) {
         const container = document.getElementById('purchases-list');
         if (!container) return;
