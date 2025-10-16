@@ -85,66 +85,71 @@ findPurchasesArray(obj) {
     return [];
 }
     renderPurchases(purchases = this.purchases) {
-        const container = document.getElementById('purchases-list');
-        if (!container) return;
+    const container = document.getElementById('purchases-list');
+    if (!container) return;
 
-        if (!purchases || purchases.length === 0) {
-            container.innerHTML = this.getEmptyState();
-            return;
-        }
+    if (!purchases || purchases.length === 0) {
+        container.innerHTML = this.getEmptyState();
+        return;
+    }
 
-        container.innerHTML = purchases.map(purchase => {
-            const purchaseId = purchase.id || purchase._id || '';
-            
-            return `
-                <div class="col-md-6 mb-4">
-                    <div class="card purchase-card h-100">
-                        <div class="card-header bg-info text-white">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <h6 class="card-title mb-0">
-                                    <i class="fas fa-shopping-cart me-1"></i>${this.escapeHtml(purchase.itemName || 'Compra')}
-                                </h6>
-                                <span class="badge bg-success">${this.app.formatCurrency(purchase.totalCost || 0)}</span>
-                            </div>
-                        </div>
-                        <div class="card-body">
-                            <div class="row">
-                                <div class="col-6">
-                                    <small class="text-muted">Tipo:</small>
-                                    <p class="mb-1">${this.getTypeText(purchase.type)}</p>
-                                </div>
-                                <div class="col-6">
-                                    <small class="text-muted">Fecha:</small>
-                                    <p class="mb-1">${this.app.formatDate(purchase.purchaseDate)}</p>
-                                </div>
-                            </div>
-                            <div class="row mt-2">
-                                <div class="col-6">
-                                    <small class="text-muted">Cantidad:</small>
-                                    <p class="mb-1">${purchase.quantity || 1} ${purchase.unit || 'unidad'}</p>
-                                </div>
-                                <div class="col-6">
-                                    <small class="text-muted">Proveedor:</small>
-                                    <p class="mb-1">${this.escapeHtml(purchase.supplier || 'N/A')}</p>
-                                </div>
-                            </div>
-                            ${purchase.notes ? `
-                                <div class="mt-2">
-                                    <small class="text-muted">Notas:</small>
-                                    <p class="mb-1 small">${this.escapeHtml(purchase.notes)}</p>
-                                </div>
-                            ` : ''}
-                        </div>
-                        <div class="card-footer bg-transparent">
-                            <button class="btn btn-outline-danger btn-sm" onclick="purchasesManager.deletePurchase('${purchaseId}')">
-                                <i class="fas fa-trash me-1"></i>Eliminar
-                            </button>
+    container.innerHTML = purchases.map(purchase => {
+        const purchaseId = purchase.id || purchase._id || '';
+        
+        // ⭐⭐ LOG PARA VERIFICAR EL ID ⭐⭐
+        console.log('🔍 Renderizando compra - ID:', purchaseId, 'Item:', purchase.itemName);
+        
+        return `
+            <div class="col-md-6 mb-4">
+                <div class="card purchase-card h-100">
+                    <div class="card-header bg-info text-white">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h6 class="card-title mb-0">
+                                <i class="fas fa-shopping-cart me-1"></i>${this.escapeHtml(purchase.itemName || 'Compra')}
+                            </h6>
+                            <span class="badge bg-success">${this.app.formatCurrency(purchase.totalCost || 0)}</span>
                         </div>
                     </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-6">
+                                <small class="text-muted">Tipo:</small>
+                                <p class="mb-1">${this.getTypeText(purchase.type)}</p>
+                            </div>
+                            <div class="col-6">
+                                <small class="text-muted">Fecha:</small>
+                                <p class="mb-1">${this.app.formatDate(purchase.purchaseDate)}</p>
+                            </div>
+                        </div>
+                        <div class="row mt-2">
+                            <div class="col-6">
+                                <small class="text-muted">Cantidad:</small>
+                                <p class="mb-1">${purchase.quantity || 1} ${purchase.unit || 'unidad'}</p>
+                            </div>
+                            <div class="col-6">
+                                <small class="text-muted">Proveedor:</small>
+                                <p class="mb-1">${this.escapeHtml(purchase.supplier || 'N/A')}</p>
+                            </div>
+                        </div>
+                        ${purchase.notes ? `
+                            <div class="mt-2">
+                                <small class="text-muted">Notas:</small>
+                                <p class="mb-1 small">${this.escapeHtml(purchase.notes)}</p>
+                            </div>
+                        ` : ''}
+                    </div>
+                    <div class="card-footer bg-transparent">
+                        <button class="btn btn-outline-danger btn-sm" 
+                                onclick="purchasesManager.deletePurchase('${purchaseId}')"
+                                data-purchase-id="${purchaseId}">
+                            <i class="fas fa-trash me-1"></i>Eliminar
+                        </button>
+                    </div>
                 </div>
-            `;
-        }).join('');
-    }
+            </div>
+        `;
+    }).join('');
+}
 
     showPurchaseForm() {
         const form = document.getElementById('purchase-form');
