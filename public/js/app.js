@@ -123,6 +123,41 @@ async checkAuthAndLoad() {
     this.showLogin();
 }
 
+
+showLogin() {
+        // Ocultar aplicación y mostrar login
+        document.getElementById('app-container').style.display = 'none';
+        document.getElementById('login-container').style.display = 'block';
+        document.getElementById('register-container').style.display = 'none';
+    }
+
+    showApp() {
+        // Ocultar login y mostrar aplicación
+        document.getElementById('login-container').style.display = 'none';
+        document.getElementById('register-container').style.display = 'none';
+        document.getElementById('app-container').style.display = 'block';
+    }
+
+    showRegister() {
+        document.getElementById('login-container').style.display = 'none';
+        document.getElementById('register-container').style.display = 'block';
+    }
+
+    // Método para mensajes de error de Auth
+    getAuthErrorMessage(errorCode) {
+        const messages = {
+            'EMAIL_EXISTS': 'Este correo electrónico ya está registrado',
+            'OPERATION_NOT_ALLOWED': 'El registro con email/contraseña no está habilitado',
+            'TOO_MANY_ATTEMPTS_TRY_LATER': 'Demasiados intentos. Intenta más tarde',
+            'EMAIL_NOT_FOUND': 'Correo electrónico no encontrado',
+            'INVALID_PASSWORD': 'Contraseña incorrecta',
+            'USER_DISABLED': 'Esta cuenta ha sido deshabilitada',
+            'INVALID_EMAIL': 'Correo electrónico inválido',
+            'WEAK_PASSWORD': 'La contraseña es muy débil'
+        };
+        return messages[errorCode] || 'Error de autenticación: ' + errorCode;
+    }
+
 // Modificar el método handleLogin para guardar correctamente
 async handleLogin(form) {
     try {
@@ -277,39 +312,7 @@ isTokenExpired(token) {
 
 
 
-    showLogin() {
-        // Ocultar aplicación y mostrar login
-        document.getElementById('app-container').style.display = 'none';
-        document.getElementById('login-container').style.display = 'block';
-        document.getElementById('register-container').style.display = 'none';
-    }
-
-    showApp() {
-        // Ocultar login y mostrar aplicación
-        document.getElementById('login-container').style.display = 'none';
-        document.getElementById('register-container').style.display = 'none';
-        document.getElementById('app-container').style.display = 'block';
-    }
-
-    showRegister() {
-        document.getElementById('login-container').style.display = 'none';
-        document.getElementById('register-container').style.display = 'block';
-    }
-
-    // Método para mensajes de error de Auth
-    getAuthErrorMessage(errorCode) {
-        const messages = {
-            'EMAIL_EXISTS': 'Este correo electrónico ya está registrado',
-            'OPERATION_NOT_ALLOWED': 'El registro con email/contraseña no está habilitado',
-            'TOO_MANY_ATTEMPTS_TRY_LATER': 'Demasiados intentos. Intenta más tarde',
-            'EMAIL_NOT_FOUND': 'Correo electrónico no encontrado',
-            'INVALID_PASSWORD': 'Contraseña incorrecta',
-            'USER_DISABLED': 'Esta cuenta ha sido deshabilitada',
-            'INVALID_EMAIL': 'Correo electrónico inválido',
-            'WEAK_PASSWORD': 'La contraseña es muy débil'
-        };
-        return messages[errorCode] || 'Error de autenticación: ' + errorCode;
-    }
+    
     // ==================== COMUNICACIÓN CON API ====================
 
     async apiCall(endpoint, options = {}) {
