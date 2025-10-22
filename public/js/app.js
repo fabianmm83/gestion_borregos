@@ -78,12 +78,8 @@ class App {
         }
     }
 
-    // ==================== AUTENTICACIÓN MEJORADA ====================
-
-    
-    // ==================== AUTENTICACIÓN CORREGIDA ====================
-
-async checkAuthAndLoad() {
+  
+    async checkAuthAndLoad() {
     console.log('🔐 Verificando autenticación...');
     const token = localStorage.getItem('authToken');
     const refreshToken = localStorage.getItem('refreshToken');
@@ -94,8 +90,6 @@ async checkAuthAndLoad() {
         return;
     }
 
-    // ⭐⭐ SOLO FIREBASE - NO TU API ⭐⭐
-    
     // Verificar expiración del token con MARGEN DE SEGURIDAD
     if (this.isTokenExpired(token)) {
         console.log('🔑 Token expirado, intentando refresh...');
@@ -105,7 +99,6 @@ async checkAuthAndLoad() {
                 const newToken = await this.refreshToken(refreshToken);
                 if (newToken) {
                     localStorage.setItem('authToken', newToken);
-                    // ⭐⭐ LLAMAR DIRECTAMENTE A FIREBASE - NO A TU API
                     await this.verifyTokenWithFirebase(newToken);
                     return;
                 }
@@ -121,11 +114,10 @@ async checkAuthAndLoad() {
         return;
     }
 
-    // ⭐⭐ TOKEN VÁLIDO - VERIFICAR DIRECTAMENTE CON FIREBASE
+    // Token válido - verificar con Firebase
     await this.verifyTokenWithFirebase(token);
 }
 
-// ⭐⭐ NUEVO MÉTODO - SOLO FIREBASE
 async verifyTokenWithFirebase(token) {
     try {
         console.log('🔍 Verificando token con Firebase...');
@@ -176,33 +168,32 @@ async verifyTokenWithFirebase(token) {
 }
 
     async refreshToken(refreshToken) {
-        try {
-            console.log('🔄 Refrescando token...');
-            const response = await fetch(`https://securetoken.googleapis.com/v1/token?key=${this.FIREBASE_API_KEY}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: `grant_type=refresh_token&refresh_token=${refreshToken}`
-            });
+    try {
+        console.log('🔄 Refrescando token...');
+        const response = await fetch(`https://securetoken.googleapis.com/v1/token?key=${this.FIREBASE_API_KEY}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `grant_type=refresh_token&refresh_token=${refreshToken}`
+        });
 
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${await response.text()}`);
-            }
-
-            const data = await response.json();
-            console.log('✅ Token refrescado exitosamente');
-            
-            localStorage.setItem('authToken', data.id_token);
-            if (data.refresh_token) {
-                localStorage.setItem('refreshToken', data.refresh_token);
-            }
-            
-            return data.id_token;
-        } catch (error) {
-            console.error('❌ Error en refreshToken:', error);
-            throw error;
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${await response.text()}`);
         }
-    }
 
+        const data = await response.json();
+        console.log('✅ Token refrescado exitosamente');
+        
+        localStorage.setItem('authToken', data.id_token);
+        if (data.refresh_token) {
+            localStorage.setItem('refreshToken', data.refresh_token);
+        }
+        
+        return data.id_token;
+    } catch (error) {
+        console.error('❌ Error en refreshToken:', error);
+        throw error;
+    }
+}
     
 
     isTokenExpired(token) {
