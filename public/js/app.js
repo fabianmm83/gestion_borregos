@@ -1090,6 +1090,70 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
+
+
+// 🔄 Detectar y manejar actualizaciones del Service Worker
+if ('serviceWorker' in navigator) {
+    let newServiceWorker;
+    
+    // Registrar el Service Worker
+    navigator.serviceWorker.register('/sw.js')
+        .then((registration) => {
+            console.log('✅ SW registrado:', registration);
+            
+            // Detectar cuando hay una nueva versión
+            registration.addEventListener('updatefound', () => {
+                newServiceWorker = registration.installing;
+                console.log('🔄 Nueva versión del SW encontrada');
+                
+                newServiceWorker.addEventListener('statechange', () => {
+                    if (newServiceWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                        // Nueva versión instalada, mostrar notificación
+                        showUpdateNotification();
+                    }
+                });
+            });
+        })
+        .catch((error) => {
+            console.log('❌ Error registrando SW:', error);
+        });
+    
+    // Detectar cuando el control cambia (nueva versión activa)
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+        console.log('🔄 Control cambiado, recargando...');
+        window.location.reload();
+    });
+}
+
+// 🔔 Mostrar notificación de actualización
+function showUpdateNotification() {
+    if (confirm('¡Nueva versión disponible! ¿Quieres actualizar ahora?')) {
+        // Enviar mensaje al SW para saltar espera
+        if (newServiceWorker) {
+            newServiceWorker.postMessage({action: 'skipWaiting'});
+        }
+    }
+}
+
+// 🔄 Forzar actualización (para debugging)
+function forceUpdate() {
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then((registrations) => {
+            registrations.forEach((registration) => {
+                registration.unregister().then(() => {
+                    caches.keys().then((cacheNames) => {
+                        cacheNames.forEach((cacheName) => {
+                            caches.delete(cacheName);
+                        });
+                    }).then(() => {
+                        window.location.reload(true);
+                    });
+                });
+            });
+        });
+    }
+}
+
 // Hacer disponible globalmente
 window.App = App;
 window.formatCurrency = (amount) => {
