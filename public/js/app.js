@@ -6,12 +6,15 @@ class App {
         this.currentView = 'dashboard';
         this.currentUser = null;
         this.deferredPrompt = null;
-        this.formsConnected = false; // ✅ Controlar conexión de formularios
-        this.eventListenersSetup = false; // ✅ Controlar event listeners
+        this.formsConnected = false;
+        this.eventListenersSetup = false;
+        this.isInitialized = false;
+        this.managersInitialized = false;
+        
         this.init();
     }
 
-    init() {
+    async init() {
         console.log('🚀 App inicializando...');
         this.createLoadingElement();
         this.setupPWA();
@@ -22,8 +25,9 @@ class App {
             this.eventListenersSetup = true;
         }
         
-        // Verificar autenticación al iniciar
-        this.checkAuthAndLoad();
+        // Verificar autenticación al iniciar - CON MEJOR MANEJO DE ERRORES
+        await this.checkAuthAndLoad();
+        this.isInitialized = true;
     }
 
     // ==================== PWA ====================
@@ -77,15 +81,17 @@ class App {
     // ==================== AUTENTICACIÓN MEJORADA ====================
 
     async checkAuthAndLoad() {
+        console.log('🔐 Verificando autenticación...');
         const token = localStorage.getItem('authToken');
         const refreshToken = localStorage.getItem('refreshToken');
         
         if (!token) {
+            console.log('❌ No hay token, mostrando login');
             this.showLogin();
             return;
         }
 
-        // Verificar expiración del token primero
+        // Verificar expiración del token con MARGEN DE SEGURIDAD
         if (this.isTokenExpired(token)) {
             console.log('🔑 Token expirado, intentando refresh...');
             
@@ -102,40 +108,59 @@ class App {
                 }
             }
             
-            localStorage.removeItem('authToken');
-            localStorage.removeItem('refreshToken');
+            // Limpiar tokens inválidos
+            this.clearAuthData();
             this.showLogin();
+            this.showAlert('Sesión expirada. Por favor, inicia sesión nuevamente.', 'warning');
             return;
         }
 
+        // Token válido, verificar y cargar
         await this.verifyTokenAndLoad(token);
     }
 
     async refreshToken(refreshToken) {
-        const response = await fetch(`https://securetoken.googleapis.com/v1/token?key=${this.FIREBASE_API_KEY}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: `grant_type=refresh_token&refresh_token=${refreshToken}`
-        });
+        try {
+            console.log('🔄 Refrescando token...');
+            const response = await fetch(`https://securetoken.googleapis.com/v1/token?key=${this.FIREBASE_API_KEY}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `grant_type=refresh_token&refresh_token=${refreshToken}`
+            });
 
-        if (response.ok) {
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+            }
+
             const data = await response.json();
+            console.log('✅ Token refrescado exitosamente');
+            
             localStorage.setItem('authToken', data.id_token);
             if (data.refresh_token) {
                 localStorage.setItem('refreshToken', data.refresh_token);
             }
+            
             return data.id_token;
+        } catch (error) {
+            console.error('❌ Error en refreshToken:', error);
+            throw error;
         }
-        return null;
     }
 
     async verifyTokenAndLoad(token) {
         try {
+            console.log('🔍 Verificando token...');
+            this.showLoading(true);
+            
             const authResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${this.FIREBASE_API_KEY}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ idToken: token })
             });
+
+            if (!authResponse.ok) {
+                throw new Error(`Token verification failed: ${authResponse.status}`);
+            }
 
             const authData = await authResponse.json();
             
@@ -147,19 +172,48 @@ class App {
                     name: user.displayName || user.email.split('@')[0]
                 };
                 
+                console.log('✅ Usuario autenticado:', this.currentUser.email);
                 this.showApp();
-                this.loadDashboardData();
+                
+                // Cargar datos iniciales
+                await this.loadInitialData();
+                
             } else {
-                throw new Error('Token inválido');
+                throw new Error('Token inválido - no user data');
             }
             
         } catch (error) {
-            console.error('Error en verificación:', error);
-            localStorage.removeItem('authToken');
-            localStorage.removeItem('refreshToken');
+            console.error('❌ Error en verificación de token:', error);
+            this.clearAuthData();
             this.showLogin();
-            this.showAlert('Sesión expirada. Por favor, inicia sesión nuevamente.', 'warning');
+            this.showAlert('Error de autenticación. Por favor, inicia sesión nuevamente.', 'danger');
+        } finally {
+            this.showLoading(false);
         }
+    }
+
+    isTokenExpired(token) {
+        try {
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            const expTime = payload.exp * 1000;
+            const currentTime = Date.now();
+            const bufferTime = 5 * 60 * 1000; // 5 minutos de margen
+            
+            console.log(`⏰ Token expira en: ${new Date(expTime).toLocaleString()}`);
+            console.log(`⏰ Hora actual: ${new Date(currentTime).toLocaleString()}`);
+            console.log(`⏰ Diferencia: ${(expTime - currentTime) / 1000} segundos`);
+            
+            return (expTime - bufferTime) < currentTime;
+        } catch (error) {
+            console.error('❌ Error verificando token:', error);
+            return true;
+        }
+    }
+
+    clearAuthData() {
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('refreshToken');
+        this.currentUser = null;
     }
 
     showLogin() {
@@ -172,6 +226,13 @@ class App {
         document.getElementById('login-container').style.display = 'none';
         document.getElementById('register-container').style.display = 'none';
         document.getElementById('app-container').style.display = 'block';
+        
+        // Asegurar que la vista actual se muestre
+        if (this.currentView) {
+            this.showView(this.currentView);
+        } else {
+            this.showView('dashboard');
+        }
     }
 
     showRegister() {
@@ -199,7 +260,7 @@ class App {
             const email = document.getElementById('login-email').value;
             const password = document.getElementById('login-password').value;
 
-            console.log('Intentando login:', { email });
+            console.log('🔐 Intentando login:', { email });
 
             const authResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${this.FIREBASE_API_KEY}`, {
                 method: 'POST',
@@ -222,28 +283,29 @@ class App {
             this.currentUser = {
                 uid: authData.localId,
                 email: authData.email,
-                name: authData.displayName || email
+                name: authData.displayName || email.split('@')[0]
             };
 
             // Verificar/crear perfil en Firestore
             try {
                 console.log('🔄 Verificando/Creando perfil en Firestore...');
-                const profileResponse = await this.apiCall('/auth/create-admin', {
+                await this.apiCall('/auth/create-admin', {
                     method: 'POST',
                     body: { 
                         email, 
-                        name: authData.displayName || email,
+                        name: authData.displayName || email.split('@')[0],
                         uid: authData.localId
                     }
                 });
-                console.log('✅ Perfil creado/verificado en Firestore:', profileResponse);
+                console.log('✅ Perfil creado/verificado en Firestore');
             } catch (profileError) {
                 console.warn('⚠️ Error creando/verificando perfil:', profileError);
+                // No es crítico, continuar
             }
 
             this.showAlert('¡Bienvenido!', 'success');
             this.showApp();
-            this.loadDashboardData();
+            await this.loadInitialData();
             
         } catch (error) {
             console.error('❌ Error en login:', error);
@@ -260,7 +322,7 @@ class App {
             const email = document.getElementById('register-email').value;
             const password = document.getElementById('register-password').value;
 
-            console.log('Intentando crear cuenta:', { name, email });
+            console.log('👤 Intentando crear cuenta:', { name, email });
 
             const authResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${this.FIREBASE_API_KEY}`, {
                 method: 'POST',
@@ -288,7 +350,7 @@ class App {
 
             // Crear perfil en nuestro backend
             try {
-                const profileResponse = await this.apiCall('/auth/create-admin', {
+                await this.apiCall('/auth/create-admin', {
                     method: 'POST',
                     body: { 
                         email, 
@@ -296,14 +358,15 @@ class App {
                         uid: authData.localId
                     }
                 });
-                console.log('✅ Perfil creado en backend:', profileResponse);
+                console.log('✅ Perfil creado en backend');
             } catch (profileError) {
                 console.warn('⚠️ Error creando perfil:', profileError);
+                // No es crítico, continuar
             }
 
             this.showAlert('¡Cuenta creada exitosamente!', 'success');
             this.showApp();
-            this.loadDashboardData();
+            await this.loadInitialData();
             
         } catch (error) {
             console.error('❌ Error completo al registrar:', error);
@@ -314,27 +377,83 @@ class App {
     }
 
     logout() {
-        localStorage.removeItem('authToken');
-        localStorage.removeItem('refreshToken');
-        this.currentUser = null;
+        this.clearAuthData();
         this.showLogin();
         this.showAlert('Sesión cerrada correctamente', 'info');
     }
 
-    isTokenExpired(token) {
+    // ==================== INICIALIZACIÓN DE MANAGERS MEJORADA ====================
+
+    async loadInitialData() {
         try {
-            const payload = JSON.parse(atob(token.split('.')[1]));
-            return payload.exp * 1000 < Date.now();
+            console.log('📦 Cargando datos iniciales...');
+            
+            // Cargar dashboard
+            await this.loadDashboardData();
+            
+            // Inicializar managers
+            this.initializeManagers();
+            
+            console.log('✅ Todos los datos iniciales cargados');
         } catch (error) {
-            return true;
+            console.error('❌ Error cargando datos iniciales:', error);
+            // No mostrar alerta para no molestar al usuario
+        }
+    }
+
+    initializeManagers() {
+        if (this.managersInitialized) {
+            console.log('✅ Managers ya inicializados');
+            return;
+        }
+
+        console.log('🔄 Inicializando managers...');
+        
+        try {
+            // Solo inicializar si no existen
+            if (typeof AnimalsManager !== 'undefined' && !window.animalsManager) {
+                window.animalsManager = new AnimalsManager(this);
+                console.log('✅ AnimalsManager inicializado');
+            }
+            
+            if (typeof SalesManager !== 'undefined' && !window.salesManager) {
+                window.salesManager = new SalesManager(this);
+                console.log('✅ SalesManager inicializado');
+            }
+            
+            if (typeof FeedsManager !== 'undefined' && !window.feedsManager) {
+                window.feedsManager = new FeedsManager(this);
+                console.log('✅ FeedsManager inicializado');
+            }
+            
+            if (typeof InventoryManager !== 'undefined' && !window.inventoryManager) {
+                window.inventoryManager = new InventoryManager(this);
+                console.log('✅ InventoryManager inicializado');
+            }
+            
+            if (typeof PurchasesManager !== 'undefined' && !window.purchasesManager) {
+                window.purchasesManager = new PurchasesManager(this);
+                console.log('✅ PurchasesManager inicializado');
+            }
+            
+            if (typeof ReportsManager !== 'undefined' && !window.reportsManager) {
+                window.reportsManager = new ReportsManager(this);
+                console.log('✅ ReportsManager inicializado');
+            }
+            
+            this.managersInitialized = true;
+            console.log('✅ Todos los managers inicializados correctamente');
+        } catch (error) {
+            console.error('❌ Error inicializando managers:', error);
         }
     }
 
     // ==================== COMUNICACIÓN CON API ====================
 
     async apiCall(endpoint, options = {}) {
+        const token = localStorage.getItem('authToken');
+        
         try {
-            const token = localStorage.getItem('authToken');
             const config = {
                 headers: {
                     'Content-Type': 'application/json',
@@ -351,17 +470,14 @@ class App {
                 config.body = JSON.stringify(config.body);
             }
 
+            console.log(`🌐 API Call: ${endpoint}`);
             const response = await fetch(`${this.API_BASE_URL}${endpoint}`, config);
             
             if (response.status === 401) {
-                localStorage.removeItem('authToken');
-                this.currentUser = null;
+                console.log('🔐 Token inválido, limpiando sesión');
+                this.clearAuthData();
                 this.showLogin();
                 throw new Error('Sesión expirada');
-            }
-
-            if (response.status === 404) {
-                throw new Error('Recurso no encontrado');
             }
 
             if (!response.ok) {
@@ -369,12 +485,18 @@ class App {
                 throw new Error(`Error ${response.status}: ${errorText}`);
             }
 
-            return await response.json();
+            const data = await response.json();
+            console.log(`✅ API Call exitoso: ${endpoint}`);
+            return data;
 
         } catch (error) {
-            console.error(`API Call error [${endpoint}]:`, error);
+            console.error(`❌ API Call error [${endpoint}]:`, error);
             
-            if (!error.message.includes('Sesión expirada')) {
+            if (error.message.includes('Sesión expirada')) {
+                this.showAlert('Sesión expirada. Por favor, inicia sesión nuevamente.', 'warning');
+            } else if (error.message.includes('Failed to fetch')) {
+                this.showAlert('Error de conexión. Verifica tu internet.', 'danger');
+            } else if (!error.message.includes('Sesión expirada')) {
                 this.showAlert('Error en la conexión: ' + error.message, 'danger');
             }
             
@@ -451,64 +573,79 @@ class App {
         console.log('✅ Dashboard actualizado correctamente');
     }
 
-    // ==================== NAVEGACIÓN Y VISTAS ====================
+    // ==================== NAVEGACIÓN Y VISTAS MEJORADA ====================
 
     showView(viewName) {
-        if (!this.currentUser && viewName !== 'dashboard') {
+        console.log(`🔄 Cambiando a vista: ${viewName}`);
+        
+        if (!this.currentUser) {
+            console.log('❌ Usuario no autenticado, redirigiendo a login');
             this.showLogin();
             return;
         }
 
+        // Ocultar todas las vistas
         document.querySelectorAll('.view-container').forEach(view => {
             view.style.display = 'none';
         });
 
+        // Mostrar vista actual
         const currentView = document.getElementById(`${viewName}-view`);
         if (currentView) {
             currentView.style.display = 'block';
+            this.currentView = viewName;
             
+            console.log(`✅ Vista ${viewName} mostrada`);
+            
+            // Disparar evento personalizado
             const event = new CustomEvent(`${viewName}ViewLoaded`);
             document.dispatchEvent(event);
+        } else {
+            console.error(`❌ Vista ${viewName} no encontrada`);
         }
 
-        this.currentView = viewName;
         this.updateActiveNav();
         this.loadViewData(viewName);
     }
 
     loadViewData(viewName) {
-        switch (viewName) {
-            case 'animals':
-                if (window.animalsManager && !window.animalsManager.initialized) {
-                    window.animalsManager.loadAnimals();
-                }
-                break;
-            case 'sales':
-                if (window.salesManager && !window.salesManager.initialized) {
-                    window.salesManager.loadSales();
-                }
-                break;
-            case 'feeds':
-                if (window.feedsManager && !window.feedsManager.initialized) {
-                    window.feedsManager.loadFeeds();
-                }
-                break;
-            case 'inventory':
-                if (window.inventoryManager && !window.inventoryManager.initialized) {
-                    window.inventoryManager.loadInventory();
-                }
-                break;
-            case 'purchases':
-                if (window.purchasesManager && !window.purchasesManager.initialized) {
-                    window.purchasesManager.loadPurchases();
-                }
-                break;
-            case 'reports':
-                if (window.reportsManager && !window.reportsManager.initialized) {
-                    window.reportsManager.generateReports();
-                }
-                break;
-        }
+        console.log(`📊 Cargando datos para vista: ${viewName}`);
+        
+        // Pequeño delay para asegurar que la vista esté renderizada
+        setTimeout(() => {
+            switch (viewName) {
+                case 'animals':
+                    if (window.animalsManager) {
+                        window.animalsManager.loadAnimals();
+                    }
+                    break;
+                case 'sales':
+                    if (window.salesManager) {
+                        window.salesManager.loadSales();
+                    }
+                    break;
+                case 'feeds':
+                    if (window.feedsManager) {
+                        window.feedsManager.loadFeeds();
+                    }
+                    break;
+                case 'inventory':
+                    if (window.inventoryManager) {
+                        window.inventoryManager.loadInventory();
+                    }
+                    break;
+                case 'purchases':
+                    if (window.purchasesManager) {
+                        window.purchasesManager.loadPurchases();
+                    }
+                    break;
+                case 'reports':
+                    if (window.reportsManager) {
+                        window.reportsManager.generateReports();
+                    }
+                    break;
+            }
+        }, 100);
     }
 
     updateActiveNav() {
@@ -604,7 +741,7 @@ class App {
                 e.preventDefault();
                 console.log('🎯 Login form submitted - ÚNICO');
                 await this.handleLogin(newLoginForm);
-            }, { once: false }); // Permitir múltiples envíos pero no duplicar listeners
+            }, { once: false });
         }
         
         if (registerForm) {
@@ -927,37 +1064,39 @@ class App {
 
 // ==================== INICIALIZACIÓN GARANTIZADA ====================
 
-function initializeManagers() {
-    console.log('🔄 Inicializando managers...');
-    
-    if (window.animalsManager && window.salesManager) {
-        console.log('✅ Managers ya estaban inicializados');
-        return;
-    }
-    
-    if (window.app) {
-        window.animalsManager = new AnimalsManager(window.app);
-        window.salesManager = new SalesManager(window.app);
-        window.feedsManager = new FeedsManager(window.app);
-        window.inventoryManager = new InventoryManager(window.app);
-        window.purchasesManager = new PurchasesManager(window.app);
-        window.reportsManager = new ReportsManager(window.app);
-        
-        console.log('✅ Todos los managers inicializados');
-    } else {
-        console.error('❌ App no está disponible');
-    }
-}
-
-// ✅ INICIALIZACIÓN MEJORADA - Una sola instancia
+// ✅ INICIALIZACIÓN MEJORADA - Manejo de errores
 document.addEventListener('DOMContentLoaded', function() {
     console.log('📄 DOM cargado, inicializando app...');
     
-    if (!window.app) {
-        window.app = new App();
+    try {
+        if (!window.app) {
+            window.app = new App();
+        }
+        
+        // Verificar después de un breve delay si la app se inicializó correctamente
+        setTimeout(() => {
+            if (!window.app.isInitialized) {
+                console.error('❌ La app no se inicializó correctamente');
+                window.app.showLogin();
+                window.app.showAlert('Error al inicializar la aplicación', 'danger');
+            }
+        }, 2000);
+        
+    } catch (error) {
+        console.error('❌ Error crítico al inicializar la app:', error);
+        // Mostrar interfaz de login como fallback
+        document.getElementById('login-container').style.display = 'block';
+        document.getElementById('app-container').style.display = 'none';
     }
-    
-    setTimeout(initializeManagers, 500);
+});
+
+// Manejar recarga de página
+window.addEventListener('beforeunload', function() {
+    console.log('🔄 Página recargando...');
+});
+
+window.addEventListener('load', function() {
+    console.log('✅ Página completamente cargada');
 });
 
 // Hacer disponible globalmente
