@@ -80,7 +80,10 @@ class App {
 
     // ==================== AUTENTICACIÓN MEJORADA ====================
 
-    async checkAuthAndLoad() {
+    
+    // ==================== AUTENTICACIÓN CORREGIDA ====================
+
+async checkAuthAndLoad() {
     console.log('🔐 Verificando autenticación...');
     const token = localStorage.getItem('authToken');
     const refreshToken = localStorage.getItem('refreshToken');
@@ -91,10 +94,8 @@ class App {
         return;
     }
 
-    // ⚠️ ⚠️ ⚠️ ELIMINAR ESTA PARTE QUE LLAMA A /auth/verify ⚠️ ⚠️ ⚠️
-    // NO llamar a tu API para verificar el token
-    // SOLO usar Firebase directamente
-
+    // ⭐⭐ SOLO FIREBASE - NO TU API ⭐⭐
+    
     // Verificar expiración del token con MARGEN DE SEGURIDAD
     if (this.isTokenExpired(token)) {
         console.log('🔑 Token expirado, intentando refresh...');
@@ -104,7 +105,8 @@ class App {
                 const newToken = await this.refreshToken(refreshToken);
                 if (newToken) {
                     localStorage.setItem('authToken', newToken);
-                    await this.verifyTokenAndLoad(newToken);
+                    // ⭐⭐ LLAMAR DIRECTAMENTE A FIREBASE - NO A TU API
+                    await this.verifyTokenWithFirebase(newToken);
                     return;
                 }
             } catch (error) {
@@ -119,8 +121,58 @@ class App {
         return;
     }
 
-    // Token válido, verificar y cargar DIRECTAMENTE con Firebase
-    await this.verifyTokenAndLoad(token);
+    // ⭐⭐ TOKEN VÁLIDO - VERIFICAR DIRECTAMENTE CON FIREBASE
+    await this.verifyTokenWithFirebase(token);
+}
+
+// ⭐⭐ NUEVO MÉTODO - SOLO FIREBASE
+async verifyTokenWithFirebase(token) {
+    try {
+        console.log('🔍 Verificando token con Firebase...');
+        this.showLoading(true);
+        
+        // ✅ SOLO FIREBASE - NO TU API
+        const authResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${this.FIREBASE_API_KEY}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ idToken: token })
+        });
+
+        if (!authResponse.ok) {
+            throw new Error(`Token verification failed: ${authResponse.status}`);
+        }
+
+        const authData = await authResponse.json();
+        
+        if (authData.users?.[0]) {
+            const user = authData.users[0];
+            this.currentUser = {
+                uid: user.localId,
+                email: user.email,
+                name: user.displayName || user.email.split('@')[0]
+            };
+            
+            console.log('✅ Usuario autenticado:', this.currentUser.email);
+            this.showApp();
+            
+            // Cargar datos iniciales
+            await this.loadInitialData();
+            
+        } else {
+            throw new Error('Token inválido - no user data');
+        }
+        
+    } catch (error) {
+        console.error('❌ Error en verificación de token:', error);
+        this.clearAuthData();
+        this.showLogin();
+        
+        if (!error.message.includes('Failed to fetch')) {
+            this.showAlert('Error de autenticación. Por favor, inicia sesión nuevamente.', 'danger');
+        }
+    } finally {
+        this.showLoading(false);
+    }
 }
 
     async refreshToken(refreshToken) {
@@ -151,57 +203,7 @@ class App {
         }
     }
 
-    async verifyTokenAndLoad(token) {
-        try {
-            console.log('🔍 Verificando token con Firebase...');
-            this.showLoading(true);
-            
-            // ✅ USAR SOLO FIREBASE PARA VERIFICAR EL TOKEN - NO LLAMAR A TU API
-            const authResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${this.FIREBASE_API_KEY}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ idToken: token })
-            });
-
-            if (!authResponse.ok) {
-                const errorData = await authResponse.json();
-                console.error('❌ Error verificación Firebase:', errorData);
-                throw new Error(`Token verification failed: ${authResponse.status}`);
-            }
-
-            const authData = await authResponse.json();
-            
-            if (authData.users?.[0]) {
-                const user = authData.users[0];
-                this.currentUser = {
-                    uid: user.localId,
-                    email: user.email,
-                    name: user.displayName || user.email.split('@')[0]
-                };
-                
-                console.log('✅ Usuario autenticado:', this.currentUser.email);
-                this.showApp();
-                
-                // Cargar datos iniciales
-                await this.loadInitialData();
-                
-            } else {
-                throw new Error('Token inválido - no user data');
-            }
-            
-        } catch (error) {
-            console.error('❌ Error en verificación de token:', error);
-            this.clearAuthData();
-            this.showLogin();
-            
-            // Solo mostrar alerta si no es un error de red
-            if (!error.message.includes('Failed to fetch')) {
-                this.showAlert('Error de autenticación. Por favor, inicia sesión nuevamente.', 'danger');
-            }
-        } finally {
-            this.showLoading(false);
-        }
-    }
+    
 
     isTokenExpired(token) {
         try {
