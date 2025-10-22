@@ -81,43 +81,47 @@ class App {
     // ==================== AUTENTICACIÓN MEJORADA ====================
 
     async checkAuthAndLoad() {
-        console.log('🔐 Verificando autenticación...');
-        const token = localStorage.getItem('authToken');
-        const refreshToken = localStorage.getItem('refreshToken');
-        
-        if (!token) {
-            console.log('❌ No hay token, mostrando login');
-            this.showLogin();
-            return;
-        }
-
-        // Verificar expiración del token con MARGEN DE SEGURIDAD
-        if (this.isTokenExpired(token)) {
-            console.log('🔑 Token expirado, intentando refresh...');
-            
-            if (refreshToken) {
-                try {
-                    const newToken = await this.refreshToken(refreshToken);
-                    if (newToken) {
-                        localStorage.setItem('authToken', newToken);
-                        await this.verifyTokenAndLoad(newToken);
-                        return;
-                    }
-                } catch (error) {
-                    console.log('❌ Error refrescando token:', error);
-                }
-            }
-            
-            // Limpiar tokens inválidos
-            this.clearAuthData();
-            this.showLogin();
-            this.showAlert('Sesión expirada. Por favor, inicia sesión nuevamente.', 'warning');
-            return;
-        }
-
-        // Token válido, verificar y cargar
-        await this.verifyTokenAndLoad(token);
+    console.log('🔐 Verificando autenticación...');
+    const token = localStorage.getItem('authToken');
+    const refreshToken = localStorage.getItem('refreshToken');
+    
+    if (!token) {
+        console.log('❌ No hay token, mostrando login');
+        this.showLogin();
+        return;
     }
+
+    // ⚠️ ⚠️ ⚠️ ELIMINAR ESTA PARTE QUE LLAMA A /auth/verify ⚠️ ⚠️ ⚠️
+    // NO llamar a tu API para verificar el token
+    // SOLO usar Firebase directamente
+
+    // Verificar expiración del token con MARGEN DE SEGURIDAD
+    if (this.isTokenExpired(token)) {
+        console.log('🔑 Token expirado, intentando refresh...');
+        
+        if (refreshToken) {
+            try {
+                const newToken = await this.refreshToken(refreshToken);
+                if (newToken) {
+                    localStorage.setItem('authToken', newToken);
+                    await this.verifyTokenAndLoad(newToken);
+                    return;
+                }
+            } catch (error) {
+                console.log('❌ Error refrescando token:', error);
+            }
+        }
+        
+        // Limpiar tokens inválidos
+        this.clearAuthData();
+        this.showLogin();
+        this.showAlert('Sesión expirada. Por favor, inicia sesión nuevamente.', 'warning');
+        return;
+    }
+
+    // Token válido, verificar y cargar DIRECTAMENTE con Firebase
+    await this.verifyTokenAndLoad(token);
+}
 
     async refreshToken(refreshToken) {
         try {
