@@ -25,7 +25,7 @@ class App {
             this.eventListenersSetup = true;
         }
         
-        // Verificar autenticación al iniciar - CON MEJOR MANEJO DE ERRORES
+        // Verificar autenticación al iniciar
         await this.checkAuthAndLoad();
         this.isInitialized = true;
     }
@@ -149,9 +149,10 @@ class App {
 
     async verifyTokenAndLoad(token) {
         try {
-            console.log('🔍 Verificando token...');
+            console.log('🔍 Verificando token con Firebase...');
             this.showLoading(true);
             
+            // ✅ USAR SOLO FIREBASE PARA VERIFICAR EL TOKEN - NO LLAMAR A TU API
             const authResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${this.FIREBASE_API_KEY}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -159,6 +160,8 @@ class App {
             });
 
             if (!authResponse.ok) {
+                const errorData = await authResponse.json();
+                console.error('❌ Error verificación Firebase:', errorData);
                 throw new Error(`Token verification failed: ${authResponse.status}`);
             }
 
@@ -186,7 +189,11 @@ class App {
             console.error('❌ Error en verificación de token:', error);
             this.clearAuthData();
             this.showLogin();
-            this.showAlert('Error de autenticación. Por favor, inicia sesión nuevamente.', 'danger');
+            
+            // Solo mostrar alerta si no es un error de red
+            if (!error.message.includes('Failed to fetch')) {
+                this.showAlert('Error de autenticación. Por favor, inicia sesión nuevamente.', 'danger');
+            }
         } finally {
             this.showLoading(false);
         }
@@ -220,6 +227,7 @@ class App {
         document.getElementById('app-container').style.display = 'none';
         document.getElementById('login-container').style.display = 'block';
         document.getElementById('register-container').style.display = 'none';
+        this.currentView = 'login';
     }
 
     showApp() {
@@ -228,7 +236,7 @@ class App {
         document.getElementById('app-container').style.display = 'block';
         
         // Asegurar que la vista actual se muestre
-        if (this.currentView) {
+        if (this.currentView && this.currentView !== 'login') {
             this.showView(this.currentView);
         } else {
             this.showView('dashboard');
@@ -238,6 +246,7 @@ class App {
     showRegister() {
         document.getElementById('login-container').style.display = 'none';
         document.getElementById('register-container').style.display = 'block';
+        this.currentView = 'register';
     }
 
     getAuthErrorMessage(errorCode) {
@@ -286,7 +295,7 @@ class App {
                 name: authData.displayName || email.split('@')[0]
             };
 
-            // Verificar/crear perfil en Firestore
+            // Verificar/crear perfil en Firestore (OPCIONAL - no crítico)
             try {
                 console.log('🔄 Verificando/Creando perfil en Firestore...');
                 await this.apiCall('/auth/create-admin', {
@@ -348,7 +357,7 @@ class App {
                 name: name
             };
 
-            // Crear perfil en nuestro backend
+            // Crear perfil en nuestro backend (OPCIONAL - no crítico)
             try {
                 await this.apiCall('/auth/create-admin', {
                     method: 'POST',
@@ -578,7 +587,7 @@ class App {
     showView(viewName) {
         console.log(`🔄 Cambiando a vista: ${viewName}`);
         
-        if (!this.currentUser) {
+        if (!this.currentUser && viewName !== 'login' && viewName !== 'register') {
             console.log('❌ Usuario no autenticado, redirigiendo a login');
             this.showLogin();
             return;
@@ -713,6 +722,11 @@ class App {
             }
         });
 
+        // Manejar recarga de página - PREVENIR DUPLICACIÓN
+        window.addEventListener('beforeunload', () => {
+            console.log('🔄 Página recargando...');
+        });
+
         // Manejar tecla Escape para cerrar modales
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
@@ -732,39 +746,36 @@ class App {
         const loginForm = document.getElementById('login-form');
         const registerForm = document.getElementById('register-form');
         
-        if (loginForm) {
-            // Remover event listeners existentes
-            const newLoginForm = loginForm.cloneNode(true);
-            loginForm.parentNode.replaceChild(newLoginForm, loginForm);
-            
-            newLoginForm.addEventListener('submit', async (e) => {
+        if (loginForm && !loginForm.hasAttribute('data-connected')) {
+            loginForm.setAttribute('data-connected', 'true');
+            loginForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 console.log('🎯 Login form submitted - ÚNICO');
-                await this.handleLogin(newLoginForm);
-            }, { once: false });
+                await this.handleLogin(loginForm);
+            });
         }
         
-        if (registerForm) {
-            const newRegisterForm = registerForm.cloneNode(true);
-            registerForm.parentNode.replaceChild(newRegisterForm, registerForm);
-            
-            newRegisterForm.addEventListener('submit', async (e) => {
+        if (registerForm && !registerForm.hasAttribute('data-connected')) {
+            registerForm.setAttribute('data-connected', 'true');
+            registerForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 console.log('🎯 Register form submitted - ÚNICO');
-                await this.handleRegister(newRegisterForm);
-            }, { once: false });
+                await this.handleRegister(registerForm);
+            });
         }
     }
 
     // ==================== UTILIDADES UI ====================
 
     showAlert(message, type = 'info', duration = 5000) {
-        const existingAlerts = document.querySelectorAll('.alert-dismissible');
-        existingAlerts.forEach(alert => {
-            if (alert.textContent.includes(message.substring(0, 20))) {
-                alert.remove();
-            }
-        });
+        // Buscar contenedor de alertas existente o crear uno
+        let alertContainer = document.getElementById('alert-container');
+        if (!alertContainer) {
+            alertContainer = document.createElement('div');
+            alertContainer.id = 'alert-container';
+            alertContainer.style.cssText = 'position: fixed; top: 80px; right: 20px; z-index: 1060; max-width: 400px;';
+            document.body.appendChild(alertContainer);
+        }
 
         const alertDiv = document.createElement('div');
         alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
@@ -774,10 +785,7 @@ class App {
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         `;
 
-        const container = document.querySelector('.container');
-        if (container) {
-            container.insertBefore(alertDiv, container.firstChild);
-        }
+        alertContainer.appendChild(alertDiv);
 
         if (duration > 0) {
             setTimeout(() => {
@@ -838,14 +846,11 @@ class App {
 
     setupFormHandler(formId, submitCallback) {
         const form = document.getElementById(formId);
-        if (form) {
-            // Remover event listeners existentes primero
-            const newForm = form.cloneNode(true);
-            form.parentNode.replaceChild(newForm, form);
-            
-            newForm.addEventListener('submit', async (e) => {
+        if (form && !form.hasAttribute('data-connected')) {
+            form.setAttribute('data-connected', 'true');
+            form.addEventListener('submit', async (e) => {
                 e.preventDefault();
-                await submitCallback(newForm);
+                await submitCallback(form);
             });
         }
     }
@@ -1064,23 +1069,22 @@ class App {
 
 // ==================== INICIALIZACIÓN GARANTIZADA ====================
 
-// ✅ INICIALIZACIÓN MEJORADA - Manejo de errores
+// ✅ INICIALIZACIÓN MEJORADA - Una sola instancia
+let appInitialized = false;
+
 document.addEventListener('DOMContentLoaded', function() {
     console.log('📄 DOM cargado, inicializando app...');
+    
+    if (appInitialized) {
+        console.log('✅ App ya estaba inicializada');
+        return;
+    }
     
     try {
         if (!window.app) {
             window.app = new App();
         }
-        
-        // Verificar después de un breve delay si la app se inicializó correctamente
-        setTimeout(() => {
-            if (!window.app.isInitialized) {
-                console.error('❌ La app no se inicializó correctamente');
-                window.app.showLogin();
-                window.app.showAlert('Error al inicializar la aplicación', 'danger');
-            }
-        }, 2000);
+        appInitialized = true;
         
     } catch (error) {
         console.error('❌ Error crítico al inicializar la app:', error);
@@ -1088,15 +1092,6 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('login-container').style.display = 'block';
         document.getElementById('app-container').style.display = 'none';
     }
-});
-
-// Manejar recarga de página
-window.addEventListener('beforeunload', function() {
-    console.log('🔄 Página recargando...');
-});
-
-window.addEventListener('load', function() {
-    console.log('✅ Página completamente cargada');
 });
 
 // Hacer disponible globalmente
