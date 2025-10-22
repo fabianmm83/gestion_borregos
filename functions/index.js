@@ -54,6 +54,7 @@ app.options('*', cors());
 // ⭐⭐ TERCERO: Middleware para parsear JSON
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
 // ==================== UTILIDADES Y CONSTANTES ====================
 
 const COLLECTIONS = {
@@ -99,12 +100,13 @@ const logger = {
 
 // ==================== MIDDLEWARE MEJORADO ====================
 
-// Middleware de autenticación
+// Middleware de autenticación MEJORADO
 const authenticate = async (req, res, next) => {
     try {
         const token = req.headers.authorization?.replace('Bearer ', '');
         
         if (!token) {
+            logger.warn('Intento de acceso sin token');
             return res.status(401).json(
                 createResponse(false, null, 'No token provided', 'MISSING_TOKEN')
             );
@@ -113,13 +115,28 @@ const authenticate = async (req, res, next) => {
         const decodedToken = await admin.auth().verifyIdToken(token);
         req.user = decodedToken;
         
-        logger.info(`Usuario autenticado: ${decodedToken.email}`, { uid: decodedToken.uid });
+        logger.info(`Usuario autenticado: ${decodedToken.email}`, { 
+            uid: decodedToken.uid,
+            tokenExp: new Date(decodedToken.exp * 1000).toISOString() 
+        });
         next();
     } catch (error) {
         logger.error('Error en autenticación', error);
-        const errorCode = error.code === 'auth/id-token-expired' ? 'TOKEN_EXPIRED' : 'INVALID_TOKEN';
-        return res.status(401).json(
-            createResponse(false, null, 'Token inválido o expirado', errorCode)
+        
+        let errorMessage = 'Token inválido';
+        let errorCode = 'INVALID_TOKEN';
+        let statusCode = 401;
+
+        if (error.code === 'auth/id-token-expired') {
+            errorMessage = 'Token expirado';
+            errorCode = 'TOKEN_EXPIRED';
+        } else if (error.code === 'auth/argument-error') {
+            errorMessage = 'Token malformado';
+            errorCode = 'MALFORMED_TOKEN';
+        }
+
+        return res.status(statusCode).json(
+            createResponse(false, null, errorMessage, errorCode)
         );
     }
 };
@@ -133,7 +150,7 @@ app.get('/', (req, res) => {
         endpoints: [
             'GET    /health',
             'POST   /auth/create-admin',
-            'POST   /auth/verify',
+            'POST   /auth/check-user',
             'POST   /auth/logout',
             'POST   /initialize',
             'GET    /dashboard',
@@ -171,7 +188,7 @@ app.get('/health', (req, res) => {
     }, 'Sistema funcionando correctamente'));
 });
 
-// ==================== ENDPOINTS DE AUTENTICACIÓN MEJORADOS ====================
+// ==================== ENDPOINTS DE AUTENTICACIÓN SIMPLIFICADOS ====================
 
 app.post('/auth/create-admin', async (req, res) => {
     try {
@@ -216,7 +233,7 @@ app.post('/auth/create-admin', async (req, res) => {
             role: 'admin',
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            lastLogin: null
+            lastLogin: admin.firestore.FieldValue.serverTimestamp()
         };
 
         await db.collection(COLLECTIONS.USERS).doc(userId).set(userProfile, { merge: true });
@@ -236,148 +253,47 @@ app.post('/auth/create-admin', async (req, res) => {
     }
 });
 
-// Verificar y refrescar token - MEJORADO
-app.post('/auth/verify', async (req, res) => {
+// Endpoint simple para verificar estado de usuario
+app.post('/auth/check-user', authenticate, async (req, res) => {
     try {
-        const { token, refreshToken } = req.body;
+        const userId = req.user.uid;
         
-        if (!token && !refreshToken) {
-            return res.status(400).json(
-                createResponse(false, null, 'Token o refresh token requerido', 'MISSING_TOKEN')
-            );
-        }
-
-        let decodedToken;
-        let newToken;
-
-        // Intentar verificar el token principal primero
-        if (token) {
-            try {
-                decodedToken = await admin.auth().verifyIdToken(token);
-            } catch (tokenError) {
-                // Si el token expiró, usar refresh token
-                if (tokenError.code === 'auth/id-token-expired' && refreshToken) {
-                    try {
-                        // Buscar sesión por refresh token
-                        const userRefreshDoc = await db.collection('user_sessions')
-                            .where('refreshToken', '==', refreshToken)
-                            .limit(1)
-                            .get();
-                            
-                        if (!userRefreshDoc.empty) {
-                            const sessionData = userRefreshDoc.docs[0].data();
-                            // Verificar que la sesión no haya expirado
-                            if (sessionData.expiresAt && new Date(sessionData.expiresAt.toDate()) > new Date()) {
-                                const userRecord = await admin.auth().getUser(sessionData.uid);
-                                decodedToken = {
-                                    uid: sessionData.uid,
-                                    email: userRecord.email,
-                                    name: userRecord.displayName
-                                };
-                                // Marcar que necesitamos generar nuevo token
-                                newToken = true;
-                            } else {
-                                // Eliminar sesión expirada
-                                await db.collection('user_sessions').doc(sessionData.uid).delete();
-                                throw new Error('Refresh token expirado');
-                            }
-                        } else {
-                            throw new Error('Refresh token inválido');
-                        }
-                    } catch (refreshError) {
-                        return res.status(401).json(
-                            createResponse(false, null, 'Sesión expirada', 'SESSION_EXPIRED')
-                        );
-                    }
-                } else {
-                    throw tokenError;
-                }
-            }
-        } else if (refreshToken) {
-            // Solo tenemos refresh token
-            try {
-                const userRefreshDoc = await db.collection('user_sessions')
-                    .where('refreshToken', '==', refreshToken)
-                    .limit(1)
-                    .get();
-                    
-                if (!userRefreshDoc.empty) {
-                    const sessionData = userRefreshDoc.docs[0].data();
-                    // Verificar expiración
-                    if (sessionData.expiresAt && new Date(sessionData.expiresAt.toDate()) > new Date()) {
-                        const userRecord = await admin.auth().getUser(sessionData.uid);
-                        decodedToken = {
-                            uid: sessionData.uid,
-                            email: userRecord.email,
-                            name: userRecord.displayName
-                        };
-                        newToken = true;
-                    } else {
-                        await db.collection('user_sessions').doc(sessionData.uid).delete();
-                        throw new Error('Refresh token expirado');
-                    }
-                } else {
-                    return res.status(401).json(
-                        createResponse(false, null, 'Sesión inválida', 'INVALID_SESSION')
-                    );
-                }
-            } catch (refreshError) {
-                return res.status(401).json(
-                    createResponse(false, null, 'Error al refrescar sesión', 'REFRESH_ERROR')
-                );
-            }
-        }
-
         // Obtener información del usuario desde Firestore
-        const userDoc = await db.collection(COLLECTIONS.USERS).doc(decodedToken.uid).get();
+        const userDoc = await db.collection(COLLECTIONS.USERS).doc(userId).get();
         const userData = userDoc.exists ? userDoc.data() : {};
 
-        // Generar nuevo refresh token si es necesario
-        const newRefreshToken = newToken ? require('crypto').randomBytes(32).toString('hex') : null;
-
-        // Guardar sesión si hay nuevo refresh token
-        if (newRefreshToken) {
-            await db.collection('user_sessions').doc(decodedToken.uid).set({
-                uid: decodedToken.uid,
-                refreshToken: newRefreshToken,
-                lastRefresh: admin.firestore.FieldValue.serverTimestamp(),
-                expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 días
-            });
-        }
-
         // Actualizar último login
-        if (userDoc.exists) {
-            await db.collection(COLLECTIONS.USERS).doc(decodedToken.uid).update({
-                lastLogin: admin.firestore.FieldValue.serverTimestamp()
-            });
-        }
+        await db.collection(COLLECTIONS.USERS).doc(userId).update({
+            lastLogin: admin.firestore.FieldValue.serverTimestamp()
+        });
 
         res.json(createResponse(true, {
-            valid: true,
-            token: token, // Mantener el token original o indicar que se necesita uno nuevo
-            refreshToken: newRefreshToken || refreshToken,
             user: {
-                uid: decodedToken.uid,
-                email: decodedToken.email,
-                name: decodedToken.name || userData.name || decodedToken.email,
+                uid: userId,
+                email: req.user.email,
+                name: req.user.name || userData.name || req.user.email,
                 role: userData.role || 'user',
                 lastLogin: userData.lastLogin?.toDate?.() || null
             }
-        }, newToken ? 'Sesión refrescada exitosamente' : 'Token válido'));
+        }, 'Usuario verificado exitosamente'));
 
     } catch (error) {
-        logger.error('Error en verificación de token', error);
-        res.status(401).json(createResponse(false, null, 'Token inválido', 'INVALID_TOKEN'));
+        logger.error('Error verificando usuario', error);
+        res.status(401).json(createResponse(false, null, 'Error al verificar usuario', 'USER_VERIFICATION_ERROR'));
     }
 });
 
-// Cerrar sesión (invalidar refresh token)
+// Cerrar sesión (simplificado)
 app.post('/auth/logout', authenticate, async (req, res) => {
     try {
         const userId = req.user.uid;
         
-        // Eliminar sesión
-        await db.collection('user_sessions').doc(userId).delete();
+        // Limpiar cualquier sesión personalizada si existe
+        try {
+            await db.collection('user_sessions').doc(userId).delete();
+        } catch (sessionError) {
+            // No es crítico si no existe
+        }
         
         logger.info('Usuario cerró sesión', { userId });
         
@@ -438,30 +354,48 @@ app.post('/initialize', authenticate, async (req, res) => {
     }
 });
 
-// ==================== ENDPOINTS DEL DASHBOARD ====================
+// ==================== ENDPOINTS DEL DASHBOARD MEJORADO ====================
 
 app.get('/dashboard', authenticate, async (req, res) => {
     try {
         const userId = req.user.uid;
         
+        logger.info('Solicitud de dashboard', { userId });
+
         // Ejecutar consultas en paralelo para mejor rendimiento
+        const promises = [
+            db.collection(COLLECTIONS.ANIMALS).where('userId', '==', userId).get(),
+            db.collection(COLLECTIONS.SALES).where('userId', '==', userId).get(),
+            db.collection(COLLECTIONS.INVENTORY).where('userId', '==', userId).get(),
+            db.collection(COLLECTIONS.FEEDS).where('userId', '==', userId).get(),
+            db.collection(COLLECTIONS.PURCHASES).where('userId', '==', userId).get()
+        ];
+
+        const results = await Promise.allSettled(promises);
+
+        // Procesar resultados con manejo de errores individuales
+        const processResult = (result, collectionName) => {
+            if (result.status === 'fulfilled') {
+                return result.value;
+            } else {
+                logger.warn(`Error obteniendo ${collectionName}`, result.reason);
+                return { docs: [] }; // Retornar vacío en caso de error
+            }
+        };
+
         const [
             animalsSnapshot,
             salesSnapshot,
             inventorySnapshot,
             feedsSnapshot,
             purchasesSnapshot
-        ] = await Promise.all([
-            db.collection(COLLECTIONS.ANIMALS).where('userId', '==', userId).get(),
-            db.collection(COLLECTIONS.SALES).where('userId', '==', userId).get(),
-            db.collection(COLLECTIONS.INVENTORY).where('userId', '==', userId).get(),
-            db.collection(COLLECTIONS.FEEDS).where('userId', '==', userId).get(),
-            db.collection(COLLECTIONS.PURCHASES).where('userId', '==', userId).get()
-        ]);
+        ] = results.map((result, index) => 
+            processResult(result, Object.values(COLLECTIONS)[index])
+        );
 
         // Procesar datos de animales
         const animalsData = animalsSnapshot.docs.map(doc => doc.data());
-        const totalAnimals = animalsSnapshot.size;
+        const totalAnimals = animalsSnapshot.docs.length;
         const activeAnimals = animalsData.filter(animal => 
             animal.status === ANIMAL_STATUS.ACTIVE || !animal.status
         ).length;
@@ -469,14 +403,11 @@ app.get('/dashboard', authenticate, async (req, res) => {
         // Procesar datos de ventas
         const salesData = salesSnapshot.docs.map(doc => doc.data());
         const totalRevenue = salesData.reduce((sum, sale) => sum + (sale.salePrice || 0), 0);
-        const recentSales = salesData
-            .sort((a, b) => new Date(b.saleDate) - new Date(a.saleDate))
-            .slice(0, 5);
 
         // Procesar datos de inventario
         const inventoryData = inventorySnapshot.docs.map(doc => doc.data());
         const lowStockItems = inventoryData.filter(item => 
-            item.currentStock <= item.minStock
+            (item.currentStock || 0) <= (item.minStock || 0)
         ).length;
 
         // Procesar datos de alimentación
@@ -491,21 +422,26 @@ app.get('/dashboard', authenticate, async (req, res) => {
             summary: {
                 total_animals: totalAnimals,
                 active_animals: activeAnimals,
-                total_sales: salesSnapshot.size,
+                total_sales: salesSnapshot.docs.length,
                 total_revenue: totalRevenue,
-                total_inventory: inventorySnapshot.size,
+                total_inventory: inventorySnapshot.docs.length,
                 low_stock_items: lowStockItems,
                 total_feed_used: totalFeedUsed,
-                total_purchases: purchasesSnapshot.size,
+                total_purchases: purchasesSnapshot.docs.length,
                 total_spent: totalSpent
             },
-            recent_activity: {
-                recent_sales: recentSales,
-                low_stock_alerts: inventoryData
-                    .filter(item => item.currentStock <= item.minStock)
-                    .slice(0, 5)
-            }
+            user: {
+                uid: userId,
+                email: req.user.email
+            },
+            timestamp: new Date().toISOString()
         };
+
+        logger.info('Dashboard generado exitosamente', { 
+            userId,
+            totalAnimals,
+            activeAnimals 
+        });
 
         res.json(createResponse(true, dashboardData, 'Datos del dashboard obtenidos exitosamente'));
 
@@ -1386,36 +1322,9 @@ app.put('/inventory/:id/stock', authenticate, async (req, res) => {
     }
 });
 
-
-
-// ==================== DIAGNÓSTICO ESPECÍFICO ====================
-
-// Middleware específico para purchases
-app.use('/purchases', (req, res, next) => {
-    console.log('🔧🔧🔧 MIDDLEWARE PURCHASES ESPECÍFICO 🔧🔧🔧');
-    console.log('🔧 MÉTODO:', req.method);
-    console.log('🔧 URL:', req.url);
-    console.log('🔧 ORIGINAL URL:', req.originalUrl);
-    console.log('🔧 PATH:', req.path);
-    console.log('🔧 BODY:', req.body);
-    console.log('🔧 TIMESTAMP:', new Date().toISOString());
-    next();
-});
-
-// LUEGO tus rutas de purchases en el ORDEN CORRECTO:
-// 1. POST /purchases
-// 2. GET /purchases  
-// 3. PUT /purchases/:id
-// 4. DELETE /purchases/:id
-
-
-
-
-
-
 // ==================== GESTIÓN DE COMPRAS ====================
 
-// ⭐⭐ PRIMERO: Endpoints de diagnóstico (van primero)
+// Endpoint de diagnóstico
 app.get('/debug/purchases', authenticate, async (req, res) => {
     try {
         const userId = req.user.uid;
@@ -1461,17 +1370,11 @@ app.get('/debug/purchases', authenticate, async (req, res) => {
     }
 });
 
-// ⭐⭐ SEGUNDO: POST (Crear compras) - ESTE DEBE IR ANTES DEL GET
-// Registrar nueva compra - VERSIÓN MEJORADA CON MÁS LOGGING
+// Registrar nueva compra
 app.post('/purchases', authenticate, async (req, res) => {
     let purchaseRef;
     
     try {
-        // ⭐⭐ LOG DE CONFIRMACIÓN CRÍTICO ⭐⭐
-        console.log('⭐⭐⭐ ENDPOINT POST /purchases EJECUTADO ⭐⭐⭐');
-        console.log('⭐⭐⭐ MÉTODO:', req.method);
-        console.log('⭐⭐⭐ BODY:', req.body);
-        
         const userId = req.user.uid;
         const {
             itemName,
@@ -1486,10 +1389,9 @@ app.post('/purchases', authenticate, async (req, res) => {
         } = req.body;
 
         // LOG DETALLADO DE LA SOLICITUD
-        logger.info('🔍 SOLICITUD DE COMPRA RECIBIDA:', {
+        logger.info('SOLICITUD DE COMPRA RECIBIDA:', {
             userId,
             body: req.body,
-            headers: req.headers,
             timestamp: new Date().toISOString()
         });
 
@@ -1525,54 +1427,41 @@ app.post('/purchases', authenticate, async (req, res) => {
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
         };
 
-        logger.info('📝 DATOS PREPARADOS PARA FIRESTORE:', {
+        logger.info('DATOS PREPARADOS PARA FIRESTORE:', {
             purchaseData,
             collection: COLLECTIONS.PURCHASES
         });
 
         // INTENTAR GUARDAR EN FIRESTORE
-        logger.info('💾 INTENTANDO GUARDAR EN FIRESTORE...');
         purchaseRef = await db.collection(COLLECTIONS.PURCHASES).add(purchaseData);
         
-        logger.info('✅ ESCRITURA EN FIRESTORE EXITOSA:', {
+        logger.info('ESCRITURA EN FIRESTORE EXITOSA:', {
             purchaseId: purchaseRef.id,
-            collection: COLLECTIONS.PURCHASES,
-            path: purchaseRef.path
+            collection: COLLECTIONS.PURCHASES
         });
 
         // VERIFICACIÓN INMEDIATA
-        logger.info('🔎 VERIFICANDO ESCRITURA...');
         const verificationDoc = await purchaseRef.get();
         
         if (!verificationDoc.exists) {
-            logger.error('❌ VERIFICACIÓN FALLIDA: Documento no existe después de guardar');
+            logger.error('VERIFICACIÓN FALLIDA: Documento no existe después de guardar');
             throw new Error('La compra no se pudo verificar en Firestore');
         }
-
-        const savedData = verificationDoc.data();
-        logger.info('✅ VERIFICACIÓN EXITOSA:', {
-            purchaseId: purchaseRef.id,
-            exists: verificationDoc.exists,
-            savedItemName: savedData.itemName
-        });
 
         // Preparar respuesta
         const responseData = {
             id: purchaseRef.id,
             ...purchaseData,
-            // Usar fechas reales para la respuesta
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
         };
 
-        logger.info('📤 ENVIANDO RESPUESTA EXITOSA');
         res.status(201).json(createResponse(true, responseData, 'Compra registrada exitosamente'));
 
     } catch (error) {
-        logger.error('💥 ERROR CRÍTICO AL GUARDAR COMPRA:', {
+        logger.error('ERROR AL GUARDAR COMPRA:', {
             error: error.message,
             code: error.code,
-            stack: error.stack,
             purchaseId: purchaseRef?.id,
             collection: COLLECTIONS.PURCHASES
         });
@@ -1593,13 +1482,11 @@ app.post('/purchases', authenticate, async (req, res) => {
 
         res.status(statusCode).json(createResponse(false, null, errorMessage, {
             code: errorCode,
-            details: error.message,
-            suggestion: 'Revisa los logs de Cloud Functions para más detalles'
+            details: error.message
         }));
     }
 });
 
-// ⭐⭐ TERCERO: GET (Obtener compras) - ESTE DEBE IR DESPUÉS DEL POST
 // Obtener compras
 app.get('/purchases', authenticate, async (req, res) => {
     try {
@@ -1657,7 +1544,6 @@ app.get('/purchases', authenticate, async (req, res) => {
     }
 });
 
-// ⭐⭐ CUARTO: PUT y DELETE (Actualizar y eliminar)
 // Actualizar compra
 app.put('/purchases/:id', authenticate, async (req, res) => {
     try {
@@ -1727,7 +1613,6 @@ app.delete('/purchases/:id', authenticate, async (req, res) => {
         res.status(500).json(createResponse(false, null, 'Error al eliminar compra', error.message));
     }
 });
-
 
 // ==================== MANEJO DE ERRORES ====================
 
