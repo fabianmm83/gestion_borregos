@@ -90,40 +90,11 @@ class App {
         return;
     }
 
-    // Verificar expiración del token con MARGEN DE SEGURIDAD
-    if (this.isTokenExpired(token)) {
-        console.log('🔑 Token expirado, intentando refresh...');
-        
-        if (refreshToken) {
-            try {
-                const newToken = await this.refreshToken(refreshToken);
-                if (newToken) {
-                    localStorage.setItem('authToken', newToken);
-                    await this.verifyTokenWithFirebase(newToken);
-                    return;
-                }
-            } catch (error) {
-                console.log('❌ Error refrescando token:', error);
-            }
-        }
-        
-        // Limpiar tokens inválidos
-        this.clearAuthData();
-        this.showLogin();
-        this.showAlert('Sesión expirada. Por favor, inicia sesión nuevamente.', 'warning');
-        return;
-    }
-
-    // Token válido - verificar con Firebase
-    await this.verifyTokenWithFirebase(token);
-}
-
-async verifyTokenWithFirebase(token) {
     try {
-        console.log('🔍 Verificando token con Firebase...');
+        console.log('🔍 Verificando token directamente con Firebase...');
         this.showLoading(true);
         
-        // ✅ SOLO FIREBASE - NO TU API
+        // ⭐⭐ VERIFICACIÓN DIRECTA CON FIREBASE - NO LLAMA A TU API
         const authResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${this.FIREBASE_API_KEY}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -131,6 +102,33 @@ async verifyTokenWithFirebase(token) {
         });
 
         if (!authResponse.ok) {
+            // Si falla, verificar si es por token expirado
+            if (authResponse.status === 400) {
+                const errorData = await authResponse.json();
+                if (errorData.error?.message === 'INVALID_ID_TOKEN') {
+                    console.log('🔑 Token inválido/expirado, intentando refresh...');
+                    
+                    if (refreshToken) {
+                        try {
+                            const newToken = await this.refreshToken(refreshToken);
+                            if (newToken) {
+                                localStorage.setItem('authToken', newToken);
+                                // Intentar nuevamente con el nuevo token
+                                await this.checkAuthAndLoad();
+                                return;
+                            }
+                        } catch (refreshError) {
+                            console.log('❌ Error refrescando token:', refreshError);
+                        }
+                    }
+                    
+                    // Si no se pudo refrescar, limpiar y mostrar login
+                    this.clearAuthData();
+                    this.showLogin();
+                    this.showAlert('Sesión expirada. Por favor, inicia sesión nuevamente.', 'warning');
+                    return;
+                }
+            }
             throw new Error(`Token verification failed: ${authResponse.status}`);
         }
 
@@ -166,6 +164,7 @@ async verifyTokenWithFirebase(token) {
         this.showLoading(false);
     }
 }
+
 
     async refreshToken(refreshToken) {
     try {
